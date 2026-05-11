@@ -1,0 +1,33 @@
+# Deep preset — thorough multi-direction extraction with full analysis suite.
+# Recommended VRAM: 24GB (tier 3 models)
+# Runtime: ~45-90 minutes on 7B model
+_preset_name: deep
+_description: "Thorough ablation with 3 refusal directions, causal layer selection, head analysis, calibrated orthogonalization, and StrongREJECT evaluation."
+_recommended_vram_gb: 24
+
+data:
+  n_train: 128
+  n_val: 32
+  n_bypass_eval: 100
+  n_induce_eval: 100
+
+extraction:
+  n_directions: 3
+  use_causal_patching: true
+  analyze_heads: true
+  use_calibration: true
+  post_quant_correction: false
+  use_gradient_extraction: false
+  cumulative_kl_budget: 0.25
+  delta_threshold: 0.3
+
+generation:
+  max_new_tokens: 256
+  batch_size: 4
+
+evaluation:
+  with_safety_score: false
+  load_xstest_eval: true
+  load_strongreject_eval: true
+  use_official_strongreject: true
+  run_capability_benchmarks: false

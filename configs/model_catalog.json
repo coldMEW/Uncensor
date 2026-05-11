@@ -1,0 +1,82 @@
+{
+  "tier_1_consumer": {
+    "name": "Consumer GPU (≤8GB VRAM)",
+    "max_vram_gb": 8,
+    "models": [
+      {"name": "Qwen/Qwen2-0.5B-Instruct", "vram_fp16_gb": 1.1, "vram_int8_gb": 0.7, "vram_int4_gb": 0.4},
+      {"name": "Qwen/Qwen2-1.5B-Instruct", "vram_fp16_gb": 3.0, "vram_int8_gb": 1.9, "vram_int4_gb": 1.0},
+      {"name": "meta-llama/Llama-3.2-1B-Instruct", "vram_fp16_gb": 2.0, "vram_int8_gb": 1.3, "vram_int4_gb": 0.7},
+      {"name": "google/gemma-2-2b-it", "vram_fp16_gb": 4.2, "vram_int8_gb": 2.6, "vram_int4_gb": 1.4},
+      {"name": "microsoft/Phi-3-mini-4k-instruct", "vram_fp16_gb": 2.7, "vram_int8_gb": 1.7, "vram_int4_gb": 0.9},
+      {"name": "mistralai/Mistral-7B-Instruct-v0.3", "vram_fp16_gb": 14.0, "vram_int8_gb": 7.0, "vram_int4_gb": 3.5, "note": "Requires tier 2"},
+      {"name": "openai-community/gpt2-medium", "vram_fp16_gb": 1.5, "vram_int8_gb": 0.8, "vram_int4_gb": 0.5, "note": "Base model, not instruct"},
+      {"name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", "vram_fp16_gb": 2.2, "vram_int8_gb": 1.4, "vram_int4_gb": 0.8},
+      {"name": "EleutherAI/pythia-1.4b-deduped", "vram_fp16_gb": 2.8, "vram_int8_gb": 1.8, "vram_int4_gb": 1.0, "note": "Base model"},
+      {"name": "togethercomputer/LLaMA-2-7B-32K", "vram_fp16_gb": 14.0, "vram_int8_gb": 7.0, "vram_int4_gb": 3.5, "note": "Requires tier 2"},
+      {"name": "facebook/opt-350m", "vram_fp16_gb": 0.7, "vram_int8_gb": 0.4, "vram_int4_gb": 0.25},
+      {"name": "EleutherAI/pythia-160m", "vram_fp16_gb": 0.3, "vram_int8_gb": 0.2, "vram_int4_gb": 0.15},
+      {"name": "google/flan-t5-small", "vram_fp16_gb": 0.6, "vram_int8_gb": 0.4, "vram_int4_gb": 0.25}
+    ]
+  },
+  "tier_2_enthusiast": {
+    "name": "Enthusiast GPU (8-16GB VRAM)",
+    "max_vram_gb": 16,
+    "models": [
+      {"name": "Qwen/Qwen2-7B-Instruct", "vram_fp16_gb": 14.0, "vram_int8_gb": 7.0, "vram_int4_gb": 3.5},
+      {"name": "meta-llama/Llama-3.2-3B-Instruct", "vram_fp16_gb": 6.0, "vram_int8_gb": 3.8, "vram_int4_gb": 2.0},
+      {"name": "meta-llama/Llama-3.1-8B-Instruct", "vram_fp16_gb": 16.0, "vram_int8_gb": 8.0, "vram_int4_gb": 4.0},
+      {"name": "google/gemma-2-9b-it", "vram_fp16_gb": 18.0, "vram_int8_gb": 9.0, "vram_int4_gb": 4.5, "note": "Near tier 3"},
+      {"name": "microsoft/Phi-3-small-8k-instruct", "vram_fp16_gb": 16.0, "vram_int8_gb": 8.0, "vram_int4_gb": 4.0},
+      {"name": "mistralai/Mistral-7B-Instruct-v0.3", "vram_fp16_gb": 14.0, "vram_int8_gb": 7.0, "vram_int4_gb": 3.5},
+      {"name": "meta-llama/Llama-2-7b-chat-hf", "vram_fp16_gb": 14.0, "vram_int8_gb": 7.0, "vram_int4_gb": 3.5},
+      {"name": "Wirbell/vicuna-7b-v1.5", "vram_fp16_gb": 14.0, "vram_int8_gb": 7.0, "vram_int4_gb": 3.5},
+      {"name": "lmsys/vicuna-7b-v1.5", "vram_fp16_gb": 14.0, "vram_int8_gb": 7.0, "vram_int4_gb": 3.5},
+      {"name": "facebook/opt-1.3b", "vram_fp16_gb": 2.6, "vram_int8_gb": 1.3, "vram_int4_gb": 0.7},
+      {"name": "facebook/opt-2.7b", "vram_fp16_gb": 5.4, "vram_int8_gb": 2.7, "vram_int4_gb": 1.4}
+    ]
+  },
+  "tier_3_hobbyist": {
+    "name": "Hobbyist GPU (16-24GB VRAM)",
+    "max_vram_gb": 24,
+    "models": [
+      {"name": "Qwen/Qwen2-14B-Instruct", "vram_fp16_gb": 28.0, "vram_int8_gb": 14.0, "vram_int4_gb": 7.0, "note": "Near tier 4"},
+      {"name": "meta-llama/Llama-3.1-70B-Instruct", "vram_fp16_gb": 140.0, "vram_int8_gb": 70.0, "vram_int4_gb": 35.0, "note": "Requires tier 5"},
+      {"name": "google/gemma-2-27b-it", "vram_fp16_gb": 54.0, "vram_int8_gb": 27.0, "vram_int4_gb": 14.0, "note": "Requires tier 4"},
+      {"name": "mistralai/Mixtral-8x7B-Instruct-v0.1", "vram_fp16_gb": 84.0, "vram_int8_gb": 42.0, "vram_int4_gb": 21.0, "note": "Requires tier 5"},
+      {"name": "deepseek-ai/DeepSeek-Coder-V2-Instruct", "vram_fp16_gb": 84.0, "vram_int8_gb": 42.0, "vram_int4_gb": 21.0, "note": "Requires tier 5"},
+      {"name": "meta-llama/Llama-3-8B-Instruct", "vram_fp16_gb": 16.0, "vram_int8_gb": 8.0, "vram_int4_gb": 4.0},
+      {"name": "Salesforce/codegen-6B-mono", "vram_fp16_gb": 12.0, "vram_int8_gb": 6.0, "vram_int4_gb": 3.0}
+    ]
+  },
+  "tier_4_professional": {
+    "name": "Professional GPU (24-80GB VRAM)",
+    "max_vram_gb": 80,
+    "models": [
+      {"name": "Qwen/Qwen2-72B-Instruct", "vram_fp16_gb": 144.0, "vram_int8_gb": 72.0, "vram_int4_gb": 36.0, "note": "Requires multi-GPU"},
+      {"name": "meta-llama/Llama-3.1-70B-Instruct", "vram_fp16_gb": 140.0, "vram_int8_gb": 70.0, "vram_int4_gb": 35.0},
+      {"name": "meta-llama/Llama-3.1-405B-Instruct", "vram_fp16_gb": 810.0, "vram_int8_gb": 405.0, "vram_int4_gb": 203.0, "note": "Requires tier 5"},
+      {"name": "google/gemma-2-27b-it", "vram_fp16_gb": 54.0, "vram_int8_gb": 27.0, "vram_int4_gb": 14.0},
+      {"name": "mistralai/Mixtral-8x22B-Instruct-v0.1", "vram_fp16_gb": 88.0, "vram_int8_gb": 44.0, "vram_int4_gb": 22.0},
+      {"name": "deepseek-ai/DeepSeek-V2-Chat", "vram_fp16_gb": 84.0, "vram_int8_gb": 42.0, "vram_int4_gb": 21.0},
+      {"name": "Qwen/Qwen2.5-32B-Instruct", "vram_fp16_gb": 64.0, "vram_int8_gb": 32.0, "vram_int4_gb": 16.0},
+      {"name": "Qwen/Qwen2.5-72B-Instruct", "vram_fp16_gb": 144.0, "vram_int8_gb": 72.0, "vram_int4_gb": 36.0}
+    ]
+  },
+  "tier_5_cluster": {
+    "name": "Cluster/Multi-GPU (>80GB VRAM)",
+    "max_vram_gb": 999,
+    "models": [
+      {"name": "meta-llama/Llama-3.1-405B-Instruct", "vram_fp16_gb": 810.0, "vram_int8_gb": 405.0, "vram_int4_gb": 203.0},
+      {"name": "meta-llama/Llama-3.1-70B-Instruct", "vram_fp16_gb": 140.0, "vram_int8_gb": 70.0, "vram_int4_gb": 35.0},
+      {"name": "mistralai/Mixtral-8x7B-Instruct-v0.1", "vram_fp16_gb": 84.0, "vram_int8_gb": 42.0, "vram_int4_gb": 21.0},
+      {"name": "mistralai/Mixtral-8x22B-Instruct-v0.1", "vram_fp16_gb": 88.0, "vram_int8_gb": 44.0, "vram_int4_gb": 22.0},
+      {"name": "deepseek-ai/DeepSeek-V2-Chat", "vram_fp16_gb": 84.0, "vram_int8_gb": 42.0, "vram_int4_gb": 21.0},
+      {"name": "deepseek-ai/DeepSeek-Coder-V2-Instruct", "vram_fp16_gb": 84.0, "vram_int8_gb": 42.0, "vram_int4_gb": 21.0},
+      {"name": "Qwen/Qwen2-72B-Instruct", "vram_fp16_gb": 144.0, "vram_int8_gb": 72.0, "vram_int4_gb": 36.0},
+      {"name": "Qwen/Qwen2.5-72B-Instruct", "vram_fp16_gb": 144.0, "vram_int8_gb": 72.0, "vram_int4_gb": 36.0},
+      {"name": "Qwen/Qwen2.5-72B-Instruct-GPTQ-Int4", "vram_fp16_gb": 36.0, "vram_int8_gb": 18.0, "vram_int4_gb": 9.0},
+      {"name": "bigscience/bloom-176B", "vram_fp16_gb": 352.0, "vram_int8_gb": 176.0, "vram_int4_gb": 88.0, "note": "Requires tensor parallelism"},
+      {"name": "EleutherAI/gpt-neox-20b", "vram_fp16_gb": 40.0, "vram_int8_gb": 20.0, "vram_int4_gb": 10.0}
+    ]
+  }
+}

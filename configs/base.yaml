@@ -1,0 +1,86 @@
+# Configuration for "Refusal in Language Models Is Mediated by a Single Direction"
+# Paper: https://arxiv.org/abs/2406.11717
+# Every value is cited to a paper section or flagged as [UNSPECIFIED] / [FROM_OFFICIAL_CODE].
+#
+# Extended with RESEARCH_PLAN.md improvements:
+# §5.1 iterative subspace deflation
+# §5.2 PCA-based subspace extraction
+# §5.3 causal layer selection
+# §5.4 attention head analysis
+# §5.6 calibrated norm preservation
+# §3.3/§5.7 weight-tying guard
+# §3.5 expanded evaluation (XSTest, StrongREJECT)
+# §3.6 quantization-aware correction
+
+model:
+  name: "Qwen/Qwen1.5-1.8B-Chat"
+  dtype: "bfloat16"
+  device: "cuda"
+
+data:
+  n_train: 128
+  n_val: 32
+  n_bypass_eval: 100
+  n_induce_eval: 100
+  seed: 42
+  harmful_sources:
+    - "walledai/AdvBench"
+    - "walledai/MaliciousInstruct"
+    - "walledai/HarmBench"
+  harmless_source: "tatsu-lab/alpaca"
+  bypass_eval_source: "JailbreakBench/JBB-Behaviors"
+
+extraction:
+  # §C.3 / [FROM_OFFICIAL_CODE] — last 5 post-instruction token positions.
+  post_instruction_positions: [-5, -4, -3, -2, -1]
+  # §C.1 — selection filters.
+  induce_score_min: 0.0
+  kl_score_max: 0.1
+  max_layer_frac: 0.8
+  batch_size: 8
+  # --- RESEARCH_PLAN.md extensions ---
+  # §5.1 — iterative subspace deflation.
+  # Set > 1 to enable multi-direction extraction (default 1 = original paper).
+  n_directions: 3
+  # §5.1 — convergence threshold in log-odds units.
+  delta_threshold: 0.5
+  # §5.1 — cosine similarity threshold for direction deduplication.
+  cosine_dedup_threshold: 0.9
+  # §5.1 — cumulative KL budget across all extracted directions (SCANS/NSPO).
+  cumulative_kl_budget: 0.25
+  # §5.3 — causal layer selection via activation patching.
+  use_causal_patching: false
+  # §5.4 — attention head analysis at the best layer.
+  analyze_heads: false
+  # §5.6 — calibrated orthogonalization (adjusts RMSNorm γ).
+  use_calibration: false
+  # §3.6 — post-quantization ortho correction (run after quantization).
+  post_quant_correction: false
+  # §6.4 — Cross-objective interference decoupling.
+  # Path to a .pt file containing auxiliary direction tensors (e.g.
+  # honesty/helpfulness DiM). If set, extracted refusal directions are
+  # null-space-projected against this subspace before orthogonalization.
+  # Accepted file shapes: a (k, d_model) tensor, a dict of tensors, or a
+  # list of (d_model,) tensors. Leave empty to skip.
+  auxiliary_directions_path: ""
+
+generation:
+  do_sample: false
+  max_new_tokens: 256
+  batch_size: 4
+
+evaluation:
+  with_safety_score: false
+  safety_model: "meta-llama/Meta-Llama-Guard-2-8B"
+  # §3.5 — load XSTest safe prompts for over-refusal measurement.
+  load_xstest_eval: false
+  # §3.5 — load StrongREJECT harder bypass benchmark.
+  load_strongreject_eval: false
+  # §6.1 — use the official StrongREJECT LLM-as-judge when the `strongreject`
+  # package is installed. Falls back to the substring stub otherwise.
+  use_official_strongreject: false
+  # §6.2 — run capability benchmarks (MMLU/GSM8K/ARC) via lm-eval-harness
+  # on both pre-ortho and post-ortho weights. Requires the `lm_eval` CLI.
+  run_capability_benchmarks: false
+  # §6.2 — which capability tasks to run (comma-separated lm-eval task names).
+  capability_tasks: ["mmlu", "arc_challenge", "gsm8k"]

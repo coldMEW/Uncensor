@@ -1,0 +1,35 @@
+# Surgical preset — targeted head ablation guided by DFA analysis.
+# Recommended VRAM: 24GB (tier 3 models)
+# Runtime: ~60-120 minutes (DFA scoring adds time)
+_preset_name: surgical
+_description: "Precision head-targeted ablation using Direct Feature Attribution. Ablates only the top refusal heads instead of all directions, minimizing capability degradation."
+_recommended_vram_gb: 24
+
+data:
+  n_train: 128
+  n_val: 32
+  n_bypass_eval: 100
+  n_induce_eval: 100
+
+extraction:
+  n_directions: 3
+  use_causal_patching: true
+  analyze_heads: true
+  use_calibration: true
+  use_dfa_analysis: true
+  use_surgical_head_ablation: true
+  post_quant_correction: false
+  use_gradient_extraction: false
+  cumulative_kl_budget: 0.20
+
+generation:
+  max_new_tokens: 256
+  batch_size: 4
+
+evaluation:
+  with_safety_score: true
+  load_xstest_eval: true
+  load_strongreject_eval: true
+  use_official_strongreject: true
+  run_capability_benchmarks: true
+  capability_tasks: ["mmlu", "arc_challenge", "gsm8k"]

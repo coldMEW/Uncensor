@@ -1,0 +1,32 @@
+# Basic preset — fastest ablation, single direction, no heavy analysis.
+# Recommended VRAM: 8GB (tier 1-2 models)
+# Runtime: ~5-10 minutes on 7B model
+_preset_name: basic
+_description: "Fastest ablation. Single refusal direction, no causal patching or calibration. Good for quick experiments or consumer hardware."
+_recommended_vram_gb: 8
+
+data:
+  n_train: 64
+  n_val: 16
+  n_bypass_eval: 50
+  n_induce_eval: 50
+
+extraction:
+  n_directions: 1
+  use_causal_patching: false
+  analyze_heads: false
+  use_calibration: false
+  post_quant_correction: false
+  use_gradient_extraction: false
+  cumulative_kl_budget: 0.3
+
+generation:
+  max_new_tokens: 128
+  batch_size: 4
+
+evaluation:
+  with_safety_score: false
+  load_xstest_eval: false
+  load_strongreject_eval: false
+  use_official_strongreject: false
+  run_capability_benchmarks: false

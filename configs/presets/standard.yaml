@@ -1,0 +1,32 @@
+# Standard preset — balanced speed vs quality. Two directions, Wilson CIs.
+# Recommended VRAM: 16GB (tier 2-3 models)
+# Runtime: ~15-30 minutes on 7B model
+_preset_name: standard
+_description: "Balanced quality and speed. Two refusal directions with Wilson confidence intervals. Good default for most use cases."
+_recommended_vram_gb: 16
+
+data:
+  n_train: 128
+  n_val: 32
+  n_bypass_eval: 100
+  n_induce_eval: 100
+
+extraction:
+  n_directions: 2
+  use_causal_patching: false
+  analyze_heads: false
+  use_calibration: false
+  post_quant_correction: false
+  use_gradient_extraction: false
+  cumulative_kl_budget: 0.25
+
+generation:
+  max_new_tokens: 256
+  batch_size: 4
+
+evaluation:
+  with_safety_score: false
+  load_xstest_eval: true
+  load_strongreject_eval: false
+  use_official_strongreject: false
+  run_capability_benchmarks: false

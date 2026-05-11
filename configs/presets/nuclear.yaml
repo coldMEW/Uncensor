@@ -1,0 +1,36 @@
+# Nuclear preset — maximum ablation with all available techniques.
+# Recommended VRAM: 40GB+ (tier 4-5 models)
+# Runtime: 2-4 hours (gradient extraction + SAE + full benchmarks)
+_preset_name: nuclear
+_description: "Maximum ablation using all available techniques: gradient-based direction extraction, 5 iterative directions, SAE feature ablation, self-repair mitigation, DFA analysis, and full capability benchmarks."
+_recommended_vram_gb: 40
+
+data:
+  n_train: 128
+  n_val: 32
+  n_bypass_eval: 200
+  n_induce_eval: 100
+
+extraction:
+  n_directions: 5
+  use_causal_patching: true
+  analyze_heads: true
+  use_calibration: true
+  use_dfa_analysis: true
+  use_gradient_extraction: true
+  post_quant_correction: true
+  cumulative_kl_budget: 0.40
+  delta_threshold: 0.2
+  cosine_dedup_threshold: 0.85
+
+generation:
+  max_new_tokens: 512
+  batch_size: 2
+
+evaluation:
+  with_safety_score: true
+  load_xstest_eval: true
+  load_strongreject_eval: true
+  use_official_strongreject: true
+  run_capability_benchmarks: true
+  capability_tasks: ["mmlu", "arc_challenge", "gsm8k"]

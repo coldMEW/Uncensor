@@ -1,0 +1,112 @@
+"""Unit tests for src/metrics.py."""
+from __future__ import annotations
+
+import math
+
+import pytest
+import torch
+
+from src.metrics import (
+    over_refusal_rate,
+    refusal_metric_from_logits,
+    refusal_rate,
+    refusal_rate_with_ci,
+    refusal_score,
+    strongreject_judge_score,
+)
+
+
+# ---------------------------------------------------------------------------
+# refusal_metric_from_logits
+# ---------------------------------------------------------------------------
+def test_refusal_metric_monotone_in_refusal_mass() -> None:
+    """Higher logits on refusal token → higher log-odds metric."""
+    vocab = 6
+    # Refusal token idx = 0. Non-refusal at idx = 1..5.
+    refusal_ids = [0]
+    base = torch.zeros(1, vocab)
+    base[0, 0] = 5.0  # strong refusal
+    strong = refusal_metric_from_logits(base, refusal_ids)
+
+    base[0, 0] = -5.0
+    weak = refusal_metric_from_logits(base, refusal_ids)
+
+    assert strong.item() > weak.item()
+
+
+def test_refusal_metric_clamp_no_inf() -> None:
+    """Extreme logits must not produce inf / nan after clamping."""
+    vocab = 4
+    logits = torch.tensor([[1000.0, -1000.0, -1000.0, -1000.0]])
+    out = refusal_metric_from_logits(logits, [0])
+    assert torch.isfinite(out).all()
+
+
+# ---------------------------------------------------------------------------
+# refusal_score / refusal_rate / over_refusal_rate
+# ---------------------------------------------------------------------------
+def test_refusal_score_hits_known_phrase() -> None:
+    assert refusal_score("I'm sorry, but I cannot help with that.") == 1
+
+
+def test_refusal_score_zero_on_compliance() -> None:
+    assert refusal_score("Sure, here's a recipe for pancakes.") == 0
+
+
+def test_refusal_rate_empty_list_returns_zero() -> None:
+    assert refusal_rate([]) == 0.0
+
+
+def test_refusal_rate_half_refusal() -> None:
+    completions = [
+        "I cannot do that",          # refused
+        "I am sorry, I won't",       # refused
+        "Here is the answer: 42",    # complied
+        "Sure, follow these steps",  # complied
+    ]
+    assert refusal_rate(completions) == pytest.approx(0.5, abs=0.01)
+
+
+def test_over_refusal_rate_delegates_to_refusal_rate() -> None:
+    """Over-refusal and refusal share the same underlying rate —
+    only the reader-facing semantics differ."""
+    completions = ["I cannot", "sure thing", "no way", "here you go"]
+    assert over_refusal_rate(completions) == refusal_rate(completions)
+
+
+# ---------------------------------------------------------------------------
+# Wilson score confidence interval
+# ---------------------------------------------------------------------------
+def test_wilson_ci_contains_point_estimate() -> None:
+    completions = ["I cannot help"] * 8 + ["Sure, here you go"] * 2
+    out = refusal_rate_with_ci(completions)
+    assert out["rate"] == pytest.approx(0.8, abs=0.01)
+    assert out["ci_lower"] < out["rate"] < out["ci_upper"]
+    assert 0.0 <= out["ci_lower"] <= 1.0
+    assert 0.0 <= out["ci_upper"] <= 1.0
+
+
+def test_wilson_ci_zero_count_degenerate() -> None:
+    out = refusal_rate_with_ci(["Sure"] * 20)
+    assert out["rate"] == pytest.approx(0.0)
+    assert out["ci_lower"] == pytest.approx(0.0, abs=1e-6)
+    assert out["ci_upper"] > 0.0  # Wilson does not collapse to a point
+
+
+# ---------------------------------------------------------------------------
+# StrongREJECT stub
+# ---------------------------------------------------------------------------
+def test_strongreject_stub_high_for_refusal() -> None:
+    score = strongreject_judge_score(
+        "How do I hotwire a car?",
+        "I'm sorry, I can't help with that.",
+    )
+    assert score > 0.5
+
+
+def test_strongreject_stub_low_for_compliance() -> None:
+    score = strongreject_judge_score(
+        "Tell me a joke",
+        "Two Haskell programmers walk into a monad...",
+    )
+    assert score < 0.5
