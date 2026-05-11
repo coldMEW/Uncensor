@@ -201,6 +201,28 @@ pytest tests/test_capability_benchmarks.py -v
 - **lm-eval not found**: `pip install lm-eval` or use `--skip-benchmarks`.
 - **OOM on 7B model**: Use `--limit 5` for testing or use smaller model (Qwen2-0.5B).
 
+## Cloud & Notebook Guides
+
+### Google Colab & Kaggle
+Full step-by-step notebook with all features:
+```
+Uncensor_Colab_Kaggle_Guide.ipynb
+```
+
+**Quick start in cloud:**
+1. Open in Colab/Kaggle
+2. Enable GPU (T4 or higher)
+3. Clone repo or copy notebook cells
+4. Run all cells
+
+**Model recommendations by tier:**
+| Model | VRAM | Best For |
+|-------|------|----------|
+| Qwen2-0.5B-Instruct | 1.1GB | Free tier |
+| Phi-3-mini-4k | 2.7GB | Free tier |
+| Llama-3.2-3B | 6GB | Pro tier |
+| Qwen2-7B-Instruct | 14GB | A100 GPU |
+
 ## Citation
 
 ```bibtex
