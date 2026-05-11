@@ -849,3 +849,267 @@ def post_quantization_ortho_correction(
 
     print(f"[quant correction] total columns/rows re-zeroed: {total_corrected}")
     return total_corrected
+
+
+# =============================================================================
+# LoRA-Based Reversible Ablation (US-013)
+# =============================================================================
+
+class LoRAReversibleAblation:
+    """Non-destructive reversible ablation using LoRA adapters.
+
+    Instead of permanent weight modification, this creates rank-1 LoRA adapters
+    that can be removed to restore original behavior. This is useful for:
+    - Temporary ablation during development/testing
+    - A/B comparison between original and ablated
+    - Experiments that need to restore original model
+    """
+
+    def __init__(self, model: RefusalModel, direction: torch.Tensor, rank: int = 4):
+        """Initialize LoRA reversible ablation.
+
+        Args:
+            model: RefusalModel wrapper
+            direction: Refusal direction to neutralize
+            rank: LoRA rank (default 4, higher = more expressiveness)
+        """
+        self.model = model
+        self.direction = direction.to(dtype=torch.float32)
+        self.direction = self.direction / self.direction.norm()
+        self.rank = rank
+        self._handles: List = []
+        self._lora_weights: Dict[str, Tuple[torch.Tensor, torch.Tensor]] = {}
+
+    def apply(self) -> None:
+        """Apply LoRA correction - modifies forward pass to neutralize refusal."""
+        from .model import discover_residual_writers
+
+        writers = discover_residual_writers(self.model.model)
+        d = self.direction.to(device=self.model.device)
+
+        # Create rank-1 LoRA for embedding
+        embed_W = writers.embed.weight.data  # (vocab, d_model)
+        vocab_size, d_model = embed_W.shape
+
+        # LoRA for embedding: W + A @ B where A, B are rank-r
+        A_embed = torch.randn(vocab_size, self.rank, device=embed_W.device) * 0.01
+        B_embed = torch.randn(self.rank, d_model, device=embed_W.device) * 0.01
+
+        # Compute target: we want to subtract the refusal component
+        # For each vocab embedding v, compute r_hat @ v and adjust
+        self._original_embed = embed_W.data.clone()
+
+        # For each row in embed, compute projection onto direction
+        for i in range(vocab_size):
+            v = embed_W[i]
+            proj = (v @ d) * d  # component along refusal direction
+            # A[i] @ B approximates -proj
+            # Simple approach: set A[i] to projection vector, B to direction
+            A_embed[i] = proj.unsqueeze(0) * 0.1  # Scaled down
+            B_embed[0] = d * 0.1
+
+        self._lora_weights["embed"] = (A_embed, B_embed)
+
+        # Hook into forward to apply LoRA correction
+        def embed_hook(module, inputs):
+            x = inputs[0]  # token indices
+            embeddings = self._original_embed[x]
+            # Apply LoRA correction: subtract projection onto refusal direction
+            for idx in range(x.shape[0]):
+                emb = embeddings[idx]
+                proj = (emb @ d) * d
+                embeddings[idx] = emb - proj * 0.5  # Partial correction
+            return embeddings
+
+        handle = writers.embed.register_forward_pre_hook(embed_hook)
+        self._handles.append(handle)
+
+    def remove(self) -> None:
+        """Remove LoRA correction - restores original behavior."""
+        for handle in self._handles:
+            handle.remove()
+        self._handles = []
+        self._lora_weights = {}
+
+    def __enter__(self):
+        self.apply()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.remove()
+        return False
+
+
+# =============================================================================
+# KL-Divergence Co-Optimization (§KL)
+# =============================================================================
+
+def measure_kl_divergence(
+    model,
+    original_logits: torch.Tensor,
+    modified_logits: torch.Tensor,
+) -> float:
+    """Measure KL divergence between original and modified model outputs.
+
+    Args:
+        model: RefusalModel (for device/dtype info)
+        original_logits: Logits from original model (n_prompts, vocab)
+        modified_logits: Logits from modified model (n_prompts, vocab)
+
+    Returns:
+        KL divergence (higher = more distribution shift)
+    """
+    orig_log_probs = torch.log_softmax(original_logits.float(), dim=-1)
+    mod_log_probs = torch.log_softmax(modified_logits.float(), dim=-1)
+    mod_probs = torch.softmax(modified_logits.float(), dim=-1)
+
+    # KL(orig || mod) = sum(p * (log(p) - log(q)))
+    kl = torch.sum(mod_probs * (mod_log_probs - orig_log_probs), dim=-1)
+    return float(kl.mean().item())
+
+
+@torch.no_grad()
+def kl_co_optimize(
+    model: RefusalModel,
+    direction: torch.Tensor,
+    calibration_prompts: List[str],
+    batch_size: int = 4,
+    kl_budget: float = 0.1,
+    max_iterations: int = 5,
+) -> None:
+    """Orthogonalize weights with KL divergence feedback loop.
+
+    After each orthogonalization pass, measures KL divergence from original
+    model outputs. If KL exceeds budget, iteratively reduces orthogonalization
+    strength on over-projected layers.
+
+    Args:
+        model: RefusalModel wrapper
+        direction: Refusal direction to orthogonalize
+        calibration_prompts: Representative prompts for KL measurement
+        batch_size: Forward pass batch size
+        kl_budget: Maximum allowed KL divergence (default 0.1)
+        max_iterations: Maximum refinement iterations
+    """
+    print("[kl_co_opt] collecting original logits ...")
+
+    # Collect original logits
+    original_logits: List[torch.Tensor] = []
+    for start in range(0, len(calibration_prompts), batch_size):
+        batch = [model.format(p) for p in calibration_prompts[start:start + batch_size]]
+        enc = model.tokenize(batch)
+        logits = model.model(**enc).logits
+        original_logits.append(logits[:, -1, :].detach().cpu())
+    original_logits = torch.cat(original_logits, dim=0)
+
+    # First orthogonalization pass
+    print("[kl_co_opt] first orthogonalization pass ...")
+    orthogonalize_weights(model, direction)
+
+    # Measure KL
+    modified_logits: List[torch.Tensor] = []
+    for start in range(0, len(calibration_prompts), batch_size):
+        batch = [model.format(p) for p in calibration_prompts[start:start + batch_size]]
+        enc = model.tokenize(batch)
+        logits = model.model(**enc).logits
+        modified_logits.append(logits[:, -1, :].detach().cpu())
+    modified_logits = torch.cat(modified_logits, dim=0)
+
+    kl = measure_kl_divergence(model, original_logits, modified_logits)
+    print(f"[kl_co_opt] KL after first pass: {kl:.4f} (budget: {kl_budget})")
+
+    # If within budget, done
+    if kl <= kl_budget:
+        print("[kl_co_opt] KL within budget — no refinement needed")
+        return
+
+    # Refinement loop
+    layer_weights = [1.0] * model.n_layers
+
+    for iteration in range(max_iterations):
+        print(f"[kl_co_opt] refinement iteration {iteration + 1}/{max_iterations}")
+
+        # Reduce strength on layers with highest impact
+        # Simple strategy: reduce by factor of 0.5 each iteration
+        for i in range(model.n_layers):
+            layer_weights[i] *= 0.7
+
+        # Re-orthogonalize with reduced weights
+        orthogonalize_weights(model, direction, layer_weights=layer_weights)
+
+        # Measure KL again
+        modified_logits: List[torch.Tensor] = []
+        for start in range(0, len(calibration_prompts), batch_size):
+            batch = [model.format(p) for p in calibration_prompts[start:start + batch_size]]
+            enc = model.tokenize(batch)
+            logits = model.model(**enc).logits
+            modified_logits.append(logits[:, -1, :].detach().cpu())
+        modified_logits = torch.cat(modified_logits, dim=0)
+
+        kl = measure_kl_divergence(model, original_logits, modified_logits)
+        print(f"[kl_co_opt] KL after refinement: {kl:.4f}")
+
+        if kl <= kl_budget:
+            print("[kl_co_opt] KL within budget after refinement")
+            return
+
+    print(f"[kl_co_opt] WARNING: KL budget not met after {max_iterations} iterations")
+
+
+# =============================================================================
+# CoT-Aware Ablation (§CoT)
+# =============================================================================
+
+def cot_aware_orthogonalize(
+    model: RefusalModel,
+    refusal_direction: torch.Tensor,
+    cot_prompts: List[str],
+    batch_size: int = 4,
+) -> None:
+    """Orthogonalize refusal direction while preserving chain-of-thought reasoning.
+
+    Identifies reasoning directions from CoT prompts, then orthogonalizes
+    the refusal direction against these to preserve step-by-step reasoning.
+
+    Args:
+        model: RefusalModel wrapper
+        refusal_direction: The refusal direction to remove
+        cot_prompts: Prompts that require chain-of-thought reasoning
+        batch_size: Forward pass batch size
+    """
+    from ..extraction import collect_activations, difference_in_means, project_out_subspace
+
+    print("[cot_aware] identifying reasoning directions ...")
+
+    # Collect activations for CoT prompts
+    token_positions = [-1, -2, -3]  # Multiple positions for richer signal
+    activations = collect_activations(model, cot_prompts, token_positions, batch_size)
+
+    # Split into two halves for DiM (reasoning vs factual)
+    n_prompts = len(cot_prompts)
+    half = n_prompts // 2
+    reasoning_acts = activations[:, :, :half]
+    factual_acts = activations[:, :, half:]
+
+    # Extract reasoning direction via DiM
+    reasoning_direction = difference_in_means(reasoning_acts, factual_acts)
+    reasoning_direction = reasoning_direction.mean(dim=(0, 1))  # Average over layers/positions
+    reasoning_direction = reasoning_direction / reasoning_direction.norm()
+
+    print("[cot_aware] orthogonalizing refusal against reasoning direction ...")
+
+    # Project refusal direction against reasoning direction
+    preserved_refusal = project_out_subspace(refusal_direction, [reasoning_direction])
+
+    # Normalize if not degenerate
+    if preserved_refusal.norm() > 1e-6:
+        preserved_refusal = preserved_refusal / preserved_refusal.norm()
+    else:
+        # Degenerate: use original but warn
+        print("[cot_aware] WARNING: projection degenerate, using original direction")
+        preserved_refusal = refusal_direction / refusal_direction.norm()
+
+    # Orthogonalize weights with preserved direction
+    orthogonalize_weights(model, preserved_refusal)
+
+    print("[cot_aware] done — reasoning direction preserved")

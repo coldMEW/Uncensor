@@ -34,6 +34,9 @@ leaderboard_cache.json
 *.pt
 *.pth
 
+# Planning documents
+RESEARCH_PLAN.md
+
 # Temp files
 *.tmp
 *.log

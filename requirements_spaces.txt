@@ -1,0 +1,10 @@
+# Additional requirements for HuggingFace Spaces
+# Core dependencies are in requirements.txt
+
+# Gradio specific (for Spaces)
+gradio>=4.0.0
+gradio_client>=0.0.3
+
+# Optional: for enhanced visualizations
+matplotlib>=3.5.0
+plotly>=5.0.0

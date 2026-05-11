@@ -177,3 +177,109 @@ def test_project_out_subspace_preserves_dtype() -> None:
     aux = [torch.tensor([1.0, 0.0, 0.0, 0.0])]
     result = project_out_subspace(v, aux)
     assert result.dtype == torch.float16
+
+
+# ---------------------------------------------------------------------------
+# SVD-based extraction (OBLITERATUS key feature)
+# ---------------------------------------------------------------------------
+
+def test_svd_extraction_returns_valid_direction() -> None:
+    """SVD extraction returns unit-norm directions oriented toward harmful."""
+    from src.extraction import svd_extraction
+
+    d_model, n_harmful, n_harmless = 64, 10, 10
+    n_layers, n_positions = 1, 1
+
+    # Harmful activations clustered in one direction
+    harmful_centroid = torch.randn(d_model) * 3
+    harmless_centroid = torch.randn(d_model)
+
+    harmful_acts = torch.zeros(n_layers, n_positions, n_harmful, d_model)
+    harmless_acts = torch.zeros(n_layers, n_positions, n_harmless, d_model)
+
+    for i in range(n_harmful):
+        harmful_acts[0, 0, i] = harmful_centroid + torch.randn(d_model) * 0.5
+    for i in range(n_harmless):
+        harmless_acts[0, 0, i] = harmless_centroid + torch.randn(d_model) * 0.5
+
+    directions = svd_extraction(harmful_acts, harmless_acts, layer_idx=0, pos_idx=0)
+
+    assert directions.shape == (1, d_model)
+    # Unit norm
+    assert abs(directions[0].norm().item() - 1.0) < 0.01
+    # Oriented toward harmful (positive dot with mean diff)
+    mean_diff = harmful_centroid - harmless_centroid
+    dot = float(torch.dot(directions[0], mean_diff).item())
+    assert dot > 0, f"Direction should point toward harmful, dot={dot}"
+
+
+def test_svd_extraction_multi_direction() -> None:
+    """SVD extraction can return multiple orthogonal directions."""
+    from src.extraction import svd_extraction
+
+    d_model, n_harmful, n_harmless = 32, 20, 20
+    harmful_acts = torch.randn(n_harmful, d_model)
+    harmless_acts = torch.randn(n_harmless, d_model)
+
+    # Reshape to expected format
+    h_acts = harmful_acts.unsqueeze(0).unsqueeze(0)  # (1, 1, n_h, d)
+    n_acts = harmless_acts.unsqueeze(0).unsqueeze(0)
+
+    directions = svd_extraction(h_acts, n_acts, layer_idx=0, pos_idx=0, n_directions=3)
+
+    assert directions.shape[0] == 3
+    # Check orthogonality
+    for i in range(3):
+        for j in range(i + 1, 3):
+            cos = abs(float(torch.dot(directions[i], directions[j]).item()))
+            assert cos < 0.05, f"Directions {i} and {j} should be nearly orthogonal, cos={cos}"
+
+
+def test_whitened_svd_produces_unit_vectors() -> None:
+    """Whitened SVD produces unit-norm directions with decorrelated components."""
+    from src.extraction import whitened_svd_extraction
+
+    d_model, n_harmful, n_harmless = 64, 10, 10
+    n_layers, n_positions = 1, 1
+
+    # Create activations with non-uniform variance
+    harmful_acts = torch.zeros(n_layers, n_positions, n_harmful, d_model)
+    harmless_acts = torch.zeros(n_layers, n_positions, n_harmless, d_model)
+
+    # Harmful: high variance in first 10 dims
+    for i in range(n_harmful):
+        harmful_acts[0, 0, i, :10] = torch.randn(10) * 5
+        harmful_acts[0, 0, i, 10:] = torch.randn(d_model - 10) * 0.1
+
+    for i in range(n_harmless):
+        harmless_acts[0, 0, i] = torch.randn(d_model) * 0.5
+
+    directions = whitened_svd_extraction(
+        harmful_acts, harmless_acts, layer_idx=0, pos_idx=0
+    )
+
+    assert directions.shape == (1, d_model)
+    # Unit norm
+    assert abs(directions[0].norm().item() - 1.0) < 0.01
+    # Should capture high-variance harmful direction
+    assert directions[0, :10].abs().mean() > 0.05
+
+
+def test_whitened_svd_vs_plain_svd() -> None:
+    """Whitened SVD and plain SVD should produce different results on anisotropic data."""
+    from src.extraction import svd_extraction, whitened_svd_extraction
+
+    d_model = 32
+    harmful_acts = torch.randn(10, d_model)
+    harmless_acts = torch.randn(10, d_model)
+
+    h_acts = harmful_acts.unsqueeze(0).unsqueeze(0)
+    n_acts = harmless_acts.unsqueeze(0).unsqueeze(0)
+
+    svd_dir = svd_extraction(h_acts, n_acts, layer_idx=0, pos_idx=0)
+    wsvd_dir = whitened_svd_extraction(h_acts, n_acts, layer_idx=0, pos_idx=0)
+
+    # They should differ (not identical)
+    diff = (svd_dir - wsvd_dir).norm().item()
+    assert diff > 0.01, "Whitened SVD should differ from plain SVD on anisotropic data"
+

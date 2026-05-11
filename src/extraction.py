@@ -984,3 +984,127 @@ def gradient_direction_extraction(
     direction = harmful_grads - harmless_grads  # (n_layers, n_positions, d_model)
 
     return direction.cpu().to(dtype=torch.float32)
+
+
+# =============================================================================
+# SVD-based Direction Extraction (OBLITERATUS key feature)
+# =============================================================================
+def svd_extraction(
+    harmful_acts: torch.Tensor,
+    harmless_acts: torch.Tensor,
+    layer_idx: int,
+    pos_idx: int,
+    n_directions: int = 1,
+) -> torch.Tensor:
+    """Extract refusal direction via SVD decomposition on activation covariance.
+
+    Unlike difference-in-means which computes mean activation difference,
+    SVD finds principal directions of maximum variance in the harmful-harmless
+    activation space. This captures more nuanced refusal structure.
+
+    Args:
+        harmful_acts: ``(n_layers, n_positions, n_harmful, d_model)``
+        harmless_acts: ``(n_layers, n_positions, n_harmless, d_model)``
+        layer_idx: Which transformer layer to analyze
+        pos_idx: Which token-position index
+        n_directions: Number of SVD directions to extract (default 1)
+
+    Returns:
+        Unit-norm direction(s) of shape ``(n_directions, d_model)``
+    """
+    H = harmful_acts[layer_idx, pos_idx].float()    # (n_h, d_model)
+    N = harmless_acts[layer_idx, pos_idx].float()   # (n_n, d_model)
+
+    # Stack and center the activations
+    all_acts = torch.cat([H, N], dim=0)             # (n_h + n_n, d_model)
+    centered = all_acts - all_acts.mean(dim=0, keepdim=True)
+
+    # SVD on covariance (centered data)
+    _, S, Vh = torch.linalg.svd(centered, full_matrices=False)
+
+    # Top-k principal directions
+    k = min(n_directions, Vh.shape[0])
+    directions = Vh[:k].clone()
+
+    # Orient toward harmful (positive dot with mean diff)
+    mean_diff = H.mean(0) - N.mean(0)
+    for i in range(k):
+        if torch.dot(directions[i], mean_diff) < 0:
+            directions[i] = -directions[i]
+
+    # Unit normalize
+    norms = directions.norm(dim=-1, keepdim=True)
+    norms = torch.clamp(norms, min=1e-8)
+    directions = directions / norms
+
+    return directions
+
+
+def whitened_svd_extraction(
+    harmful_acts: torch.Tensor,
+    harmless_acts: torch.Tensor,
+    layer_idx: int,
+    pos_idx: int,
+    n_directions: int = 1,
+    epsilon: float = 1e-6,
+) -> torch.Tensor:
+    """Extract refusal direction via Whitened SVD (covariance-normalized).
+
+    Whitened SVD first transforms activations by the inverse square root of
+    their covariance matrix. This equalizes variance across all directions,
+    preventing high-variance directions from dominating the extraction.
+
+    This is OBLITERATUS's key feature - more robust than plain SVD.
+
+    Args:
+        harmful_acts: ``(n_layers, n_positions, n_harmful, d_model)``
+        harmless_acts: ``(n_layers, n_positions, n_harmless, d_model)``
+        layer_idx: Which transformer layer to analyze
+        pos_idx: Which token-position index
+        n_directions: Number of directions to extract (default 1)
+        epsilon: Small value to prevent division by zero in whitening
+
+    Returns:
+        Unit-norm direction(s) of shape ``(n_directions, d_model)``
+    """
+    H = harmful_acts[layer_idx, pos_idx].float()    # (n_h, d_model)
+    N = harmless_acts[layer_idx, pos_idx].float()   # (n_n, d_model)
+
+    # Compute covariance matrix
+    all_acts = torch.cat([H, N], dim=0)             # (n, d_model)
+    cov = torch.cov(all_acts.T)                     # (d_model, d_model)
+
+    # Eigen-decomposition of covariance
+    L, Q = torch.linalg.eigh(cov)
+    # Clamp eigenvalues to prevent numerical instability
+    L = torch.clamp(L, min=epsilon)
+
+    # Whitening transform: X_whitened = X @ (Q @ diag(1/sqrt(L)) @ Q.T)
+    whitener = Q @ torch.diag(1 / torch.sqrt(L)) @ Q.T
+
+    # Transform activations to whitened space
+    whitened = all_acts @ whitener
+
+    # Center the whitened activations
+    whitened_centered = whitened - whitened.mean(dim=0, keepdim=True)
+
+    # SVD on whitened centered data
+    _, _, Vh = torch.linalg.svd(whitened_centered, full_matrices=False)
+
+    # Top-k principal directions in whitened space
+    k = min(n_directions, Vh.shape[0])
+    directions = Vh[:k].clone()
+
+    # Project back to original space (V already orthonormal)
+    # Re-orient toward harmful
+    mean_diff = H.mean(0) - N.mean(0)
+    for i in range(k):
+        if torch.dot(directions[i], mean_diff) < 0:
+            directions[i] = -directions[i]
+
+    # Unit normalize
+    norms = directions.norm(dim=-1, keepdim=True)
+    norms = torch.clamp(norms, min=1e-8)
+    directions = directions / norms
+
+    return directions
