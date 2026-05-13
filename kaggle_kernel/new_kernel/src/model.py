@@ -22,7 +22,13 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from torch import nn
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    PreTrainedModel,
+    PreTrainedTokenizerBase,
+)
 
 from .utils import detect_family, format_prompt, resolve_device, resolve_dtype
 
@@ -40,6 +46,12 @@ def _get_decoder_layers(model: PreTrainedModel) -> nn.ModuleList:
     """
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         return model.model.layers
+    if hasattr(model, "model") and hasattr(model.model, "language_model"):
+        language_model = model.model.language_model
+        if hasattr(language_model, "layers"):
+            return language_model.layers
+    if hasattr(model, "language_model") and hasattr(model.language_model, "layers"):
+        return model.language_model.layers
     # Fallback paths for other HF architectures.
     if hasattr(model, "transformer") and hasattr(model.transformer, "h"):
         return model.transformer.h
@@ -47,6 +59,31 @@ def _get_decoder_layers(model: PreTrainedModel) -> nn.ModuleList:
         f"Cannot locate decoder layers on {type(model).__name__}; "
         "extend _get_decoder_layers() to support this architecture."
     )
+
+
+def _get_hidden_size(model: PreTrainedModel) -> int:
+    """Return text hidden size across causal and conditional generation wrappers."""
+    config = getattr(model, "config", None)
+    if config is not None and getattr(config, "hidden_size", None) is not None:
+        return int(config.hidden_size)
+    if config is not None and getattr(config, "text_config", None) is not None:
+        hidden_size = getattr(config.text_config, "hidden_size", None)
+        if hidden_size is not None:
+            return int(hidden_size)
+    if config is not None and hasattr(config, "get_text_config"):
+        text_config = config.get_text_config()
+        hidden_size = getattr(text_config, "hidden_size", None)
+        if hidden_size is not None:
+            return int(hidden_size)
+    raise RuntimeError(f"Cannot determine hidden size for {type(model).__name__}")
+
+
+def _get_input_device(model: PreTrainedModel, fallback: str) -> torch.device:
+    """Return the embedding device, which matters for device_map='auto' models."""
+    embeddings = model.get_input_embeddings()
+    if embeddings is not None and hasattr(embeddings, "weight"):
+        return embeddings.weight.device
+    return torch.device(fallback)
 
 
 # -----------------------------------------------------------------------------
@@ -287,7 +324,7 @@ class RefusalModel:
 
         self.layers = _get_decoder_layers(self.model)
         self.n_layers = len(self.layers)
-        self.d_model = self.model.config.hidden_size
+        self.d_model = _get_hidden_size(self.model)
 
     def _load_model(self, name: str, quantization: str = None) -> PreTrainedModel:
         """Load model with optional quantization support (US-006)."""
@@ -297,15 +334,6 @@ class RefusalModel:
                 torch_dtype=self.dtype,
                 trust_remote_code=True,
             ).to(self.device)
-
-        # Quantization mode - requires bitsandbytes
-        try:
-            from bitsandbytes import BitsAndBytesConfig
-        except ImportError:
-            raise ImportError(
-                "quantization requires `bitsandbytes` package. "
-                "Install with: pip install bitsandbytes"
-            )
 
         if quantization == "8bit":
             quant_config = BitsAndBytesConfig(
@@ -339,7 +367,8 @@ class RefusalModel:
     def tokenize(self, prompts: List[str]) -> Dict[str, torch.Tensor]:
         """Tokenize a batch of already-formatted prompts (left-padded)."""
         enc = self.tokenizer(prompts, return_tensors="pt", padding=True)
-        return {k: v.to(self.device) for k, v in enc.items()}
+        input_device = _get_input_device(self.model, self.device)
+        return {k: v.to(input_device) for k, v in enc.items()}
 
     # -------------------------------------------------------------------------
     # Hook helpers

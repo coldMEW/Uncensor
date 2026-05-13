@@ -12,6 +12,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import pytest
+from types import SimpleNamespace
+
+import torch
+from torch import nn
 
 
 class TestQuantizationConfig:
@@ -33,17 +37,68 @@ class TestQuantizationConfig:
         assert "8bit" in source
         assert "4bit" in source
 
+    def test_quantization_uses_transformers_bitsandbytes_config(self, monkeypatch):
+        """BitsAndBytesConfig belongs to Transformers, not bitsandbytes."""
+        from src import model as model_module
+        from src.model import RefusalModel
+
+        captured = {}
+
+        class FakeAutoModel:
+            @staticmethod
+            def from_pretrained(name, **kwargs):
+                captured["name"] = name
+                captured.update(kwargs)
+                return object()
+
+        monkeypatch.setattr(model_module, "AutoModelForCausalLM", FakeAutoModel)
+
+        shim = SimpleNamespace(dtype="float16", device="cuda")
+        loaded = RefusalModel._load_model(shim, "test/model", quantization="8bit")
+
+        assert loaded is not None
+        assert captured["name"] == "test/model"
+        assert captured["trust_remote_code"] is True
+        assert captured["quantization_config"].load_in_8bit is True
+
     def test_quantization_raises_on_unknown(self):
         """Verify unknown quantization raises ValueError."""
         from src.model import RefusalModel
-        try:
-            import bitsandbytes
-        except ImportError:
-            pytest.skip("bitsandbytes not installed")
-        # Unknown quantization should raise
-        model = RefusalModel(name="gpt2", device="cpu", quantization="invalid")
+
+        shim = SimpleNamespace(dtype="float16", device="cuda")
         with pytest.raises(ValueError, match="Unknown quantization"):
-            model.load()
+            RefusalModel._load_model(shim, "test/model", quantization="invalid")
+
+
+class TestArchitectureDiscovery:
+    """Regression tests for Gemma 4 / conditional generation wrappers."""
+
+    def test_decoder_layers_support_nested_language_model(self):
+        from src.model import _get_decoder_layers
+
+        layers = nn.ModuleList([nn.Identity(), nn.Identity()])
+        fake_model = SimpleNamespace(
+            model=SimpleNamespace(language_model=SimpleNamespace(layers=layers))
+        )
+
+        assert _get_decoder_layers(fake_model) is layers
+
+    def test_hidden_size_supports_text_config(self):
+        from src.model import _get_hidden_size
+
+        fake_model = SimpleNamespace(
+            config=SimpleNamespace(text_config=SimpleNamespace(hidden_size=2560))
+        )
+
+        assert _get_hidden_size(fake_model) == 2560
+
+    def test_tokenize_uses_embedding_device_for_device_map_models(self):
+        from src.model import _get_input_device
+
+        embedding = nn.Embedding(8, 4)
+        fake_model = SimpleNamespace(get_input_embeddings=lambda: embedding)
+
+        assert _get_input_device(fake_model, "cuda") == embedding.weight.device
 
 
 class TestQuantizationDocs:
