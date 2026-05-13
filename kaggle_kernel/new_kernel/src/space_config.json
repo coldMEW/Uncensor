@@ -1,0 +1,14 @@
+# Uncensor - HuggingFace Spaces Configuration
+# Place this in your Space root directory
+
+{
+  "title": "Uncensor",
+  "emoji": "🔓",
+  "colorFrom": "purple",
+  "colorTo": "blue",
+  "sdk": "gradio",
+  "sdk_version": "5.29.0",
+  "app_file": "app.py",
+  "pinned": false,
+  "license": "agpl-3.0"
+}
