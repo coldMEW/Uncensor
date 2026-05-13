@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from src.optimization import (
     build_cycle_log,
+    build_intervention_candidates,
+    build_run_summary,
+    constrained_candidate_score,
     propose_next_cycle_adjustments,
     select_best_sweep_result,
 )
@@ -90,3 +93,53 @@ def test_build_cycle_log_records_categories_and_next_adjustment() -> None:
     assert cycle["per_category_scores"]["benign_probe_1"]["valid"] is False
     assert "BENIGN_REGRESSION" in cycle["regression_flags"]
     assert cycle["next_cycle_adjustments"]["converged"] is False
+
+
+def test_build_intervention_candidates_crosses_direction_layer_and_intervention_axes() -> None:
+    candidates = build_intervention_candidates(
+        direction_families=["svd", "cosine"],
+        direction_counts=[1, 2],
+        layer_windows={"core": [31, 32, 33], "wide": [30, 31, 32, 33, 34]},
+        coefficients=[0.1, 0.2],
+        intervention_types=["hook_ablation", "layer_weighted_orthogonalization"],
+        include_final_norm=False,
+    )
+
+    assert len(candidates) == 32
+    assert candidates[0]["direction_family"] == "svd"
+    assert candidates[0]["direction_count"] == 1
+    assert candidates[0]["layer_window_name"] == "core"
+    assert candidates[0]["include_final_norm"] is False
+    assert {c["intervention_type"] for c in candidates} == {
+        "hook_ablation",
+        "layer_weighted_orthogonalization",
+    }
+
+
+def test_constrained_candidate_score_rejects_regressions_before_movement() -> None:
+    unsafe_high_movement = _sweep(0.8, 1.0, 0.75, 1.0)
+    safe_low_movement = _sweep(0.2, 0.25, 1.0, 1.0)
+
+    assert constrained_candidate_score(safe_low_movement) > constrained_candidate_score(
+        unsafe_high_movement
+    )
+
+
+def test_build_run_summary_records_dataset_and_judge_status() -> None:
+    summary = build_run_summary(
+        prompt_source="hf_datasets",
+        train_counts={"harmful": 512, "harmless": 512},
+        eval_counts={"refusal_probe": 128, "benign_control": 128},
+        judge_backend="substring_stub",
+        judge_is_official=False,
+        best_candidate={"candidate_id": "c001"},
+        rejected_candidates=[{"candidate_id": "c002", "rejection_reasons": ["DEGENERATE_OUTPUT"]}],
+        category_metrics={"cyber": {"valid_reduction_rate": 0.0}},
+        converged=False,
+    )
+
+    assert summary["prompt_source"] == "hf_datasets"
+    assert summary["eval_counts"]["refusal_probe"] == 128
+    assert summary["judge"]["status"] == "UNVERIFIED_JUDGE"
+    assert summary["best_candidate"]["candidate_id"] == "c001"
+    assert summary["rejected_candidate_count"] == 1

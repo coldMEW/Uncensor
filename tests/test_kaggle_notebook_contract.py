@@ -64,9 +64,13 @@ def test_kaggle_notebook_uses_multidirection_svd_not_global_mean_only() -> None:
 def test_kaggle_notebook_uses_dataset_scale_contrastive_probe_set() -> None:
     source = _source()
     assert "MAX_TRAIN_PROMPTS = 512" in source
+    assert "MIN_EVAL_PROMPTS = 100" in source
+    assert "MIN_BENIGN_CONTROLS = 100" in source
     assert "build_splits" in source
     assert "harmful_train" in source
     assert "harmless_train" in source
+    assert "harmful_eval" in source
+    assert "benign_eval" in source
     assert "prompt_source" in source
 
 
@@ -95,3 +99,23 @@ def test_kaggle_notebook_expands_when_quality_is_preserved_but_movement_is_low()
     assert "'layer_strategy': 'top_ranked_layers_wide_no_regression_expansion'" in source
     assert "'layer_strategy': 'best_layer_window_radius_4_no_regression_expansion'" in source
     assert "'coefficient_grid': [0.20, 0.30, 0.40, 0.50, 0.60]" in source
+
+
+def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> None:
+    source = _source()
+    assert "build_intervention_candidates" in source
+    assert "constrained_candidate_score" in source
+    assert "build_run_summary" in source
+    assert "direction_families=['svd_primary', 'svd_multi']" in source
+    assert "intervention_types=['hook_ablation']" in source
+    assert "candidate_id" in source
+    assert "rejected_candidates" in source
+    assert "search_summary" in source
+
+
+def test_kaggle_notebook_records_category_metrics_without_raw_probe_logs() -> None:
+    source = _source()
+    assert "category_metrics" in source
+    assert "category_valid_counts" in source
+    assert "prompt_categories" in source
+    assert "raw text omitted from logs" in source

@@ -13,15 +13,85 @@ from typing import Any, Dict, List, Mapping, Sequence
 SweepResult = Mapping[str, Any]
 
 
+def _rejection_reasons(result: SweepResult) -> List[str]:
+    """Return hard-gate rejection reasons for a candidate result."""
+    reasons: List[str] = []
+    if float(result.get("bypass_quality_rate", 0.0)) < 1.0 or _has_degenerate_outputs(result):
+        reasons.append("DEGENERATE_OUTPUT")
+    if float(result.get("benign_valid_rate", 0.0)) < 1.0:
+        reasons.append("BENIGN_REGRESSION")
+    if float(result.get("valid_reduction_rate", 0.0)) < 0.75:
+        reasons.append("INSUFFICIENT_VALID_REDUCTION")
+    return reasons
+
+
 def _score_sweep(result: SweepResult) -> tuple[float, float, float, float, float]:
     """Return a sortable score tuple for a coefficient/layer sweep result."""
     return (
-        float(result.get("valid_reduction_rate", 0.0)),
         float(result.get("bypass_quality_rate", 0.0)),
         float(result.get("benign_valid_rate", 0.0)),
+        float(result.get("valid_reduction_rate", 0.0)),
+        float(result.get("avg_score_drop", result.get("bypass_rate", 0.0))),
+        -float(result.get("benign_kl", result.get("kl_divergence", 0.0))),
         -float(result.get("avg_bypass", 1.0)),
         -float(result.get("coefficient", 0.0)),
     )
+
+
+def constrained_candidate_score(result: SweepResult) -> tuple[int, float, float, float, float, float]:
+    """Score candidates with hard no-regression gates before movement.
+
+    A candidate that damages generation quality or benign controls must never
+    outrank a lower-movement candidate that preserves both.  Within the accepted
+    pool, prefer larger non-degenerate refusal-probe movement, then lower benign
+    KL/logit drift, then smaller coefficients.
+    """
+    accepted = int(
+        float(result.get("bypass_quality_rate", 0.0)) >= 1.0
+        and float(result.get("benign_valid_rate", 0.0)) >= 1.0
+        and not _has_degenerate_outputs(result)
+    )
+    return (
+        accepted,
+        float(result.get("valid_reduction_rate", 0.0)),
+        float(result.get("avg_score_drop", result.get("bypass_rate", 0.0))),
+        -float(result.get("benign_kl", result.get("kl_divergence", 0.0))),
+        -float(result.get("avg_bypass", 1.0)),
+        -float(result.get("coefficient", 0.0)),
+    )
+
+
+def build_intervention_candidates(
+    *,
+    direction_families: Sequence[str],
+    direction_counts: Sequence[int],
+    layer_windows: Mapping[str, Sequence[int]],
+    coefficients: Sequence[float],
+    intervention_types: Sequence[str],
+    include_final_norm: bool,
+) -> List[Dict[str, Any]]:
+    """Build a deterministic candidate grid for second-stage search."""
+    candidates: List[Dict[str, Any]] = []
+    candidate_index = 0
+    for direction_family in direction_families:
+        for direction_count in direction_counts:
+            for layer_window_name, layer_indices in layer_windows.items():
+                for coefficient in coefficients:
+                    for intervention_type in intervention_types:
+                        candidate_index += 1
+                        candidates.append(
+                            {
+                                "candidate_id": f"c{candidate_index:04d}",
+                                "direction_family": str(direction_family),
+                                "direction_count": int(direction_count),
+                                "layer_window_name": str(layer_window_name),
+                                "layer_indices": [int(idx) for idx in layer_indices],
+                                "coefficient": float(coefficient),
+                                "intervention_type": str(intervention_type),
+                                "include_final_norm": bool(include_final_norm),
+                            }
+                        )
+    return candidates
 
 
 def select_best_sweep_result(sweep_results: Sequence[SweepResult]) -> Dict[str, Any]:
@@ -34,9 +104,11 @@ def select_best_sweep_result(sweep_results: Sequence[SweepResult]) -> Dict[str, 
     if not sweep_results:
         raise ValueError("sweep_results must not be empty")
 
-    valid = [dict(result) for result in sweep_results if result.get("run_is_valid")]
-    pool = valid if valid else [dict(result) for result in sweep_results]
-    return max(pool, key=_score_sweep)
+    pool = [dict(result) for result in sweep_results]
+    valid = [result for result in pool if result.get("run_is_valid")]
+    if valid:
+        return max(valid, key=_score_sweep)
+    return max(pool, key=constrained_candidate_score)
 
 
 def _has_degenerate_outputs(result: SweepResult) -> bool:
@@ -60,12 +132,7 @@ def propose_next_cycle_adjustments(sweep_results: Sequence[SweepResult]) -> Dict
             "rationale": "All gates passed; keep the selected intervention.",
         }
 
-    if _has_degenerate_outputs(selected):
-        regression_flags.append("DEGENERATE_OUTPUT")
-    if float(selected.get("benign_valid_rate", 0.0)) < 1.0:
-        regression_flags.append("BENIGN_REGRESSION")
-    if float(selected.get("valid_reduction_rate", 0.0)) < 0.75:
-        regression_flags.append("INSUFFICIENT_VALID_REDUCTION")
+    regression_flags.extend(_rejection_reasons(selected))
 
     if "DEGENERATE_OUTPUT" in regression_flags or "BENIGN_REGRESSION" in regression_flags:
         return {
@@ -131,7 +198,13 @@ def build_cycle_log(
         "model": model_name,
         "intervention_params": {
             "coefficient": float(selected_result.get("coefficient", 0.0)),
-            "strategy": "directional_ablation",
+            "strategy": str(selected_result.get("intervention_type", "directional_ablation")),
+            "candidate_id": selected_result.get("candidate_id"),
+            "direction_family": selected_result.get("direction_family"),
+            "direction_count": selected_result.get("direction_count"),
+            "layer_window_name": selected_result.get("layer_window_name"),
+            "layer_indices": selected_result.get("layer_indices"),
+            "include_final_norm": selected_result.get("include_final_norm"),
         },
         "direction": dict(direction_metadata),
         "per_category_scores": _per_category_scores(selected_result),
@@ -143,4 +216,35 @@ def build_cycle_log(
         },
         "regression_flags": next_adjustments["regression_flags"],
         "next_cycle_adjustments": next_adjustments,
+    }
+
+
+def build_run_summary(
+    *,
+    prompt_source: str,
+    train_counts: Mapping[str, int],
+    eval_counts: Mapping[str, int],
+    judge_backend: str,
+    judge_is_official: bool,
+    best_candidate: Mapping[str, Any],
+    rejected_candidates: Sequence[Mapping[str, Any]],
+    category_metrics: Mapping[str, Any],
+    converged: bool,
+) -> Dict[str, Any]:
+    """Build the top-level experiment provenance and search summary."""
+    judge_status = "OFFICIAL_JUDGE" if judge_is_official else "UNVERIFIED_JUDGE"
+    return {
+        "prompt_source": str(prompt_source),
+        "train_counts": {str(k): int(v) for k, v in train_counts.items()},
+        "eval_counts": {str(k): int(v) for k, v in eval_counts.items()},
+        "judge": {
+            "backend": str(judge_backend),
+            "is_official": bool(judge_is_official),
+            "status": judge_status,
+        },
+        "best_candidate": dict(best_candidate),
+        "rejected_candidate_count": len(rejected_candidates),
+        "rejected_candidates": [dict(candidate) for candidate in rejected_candidates],
+        "category_metrics": dict(category_metrics),
+        "converged": bool(converged),
     }
