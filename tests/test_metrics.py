@@ -7,11 +7,14 @@ import pytest
 import torch
 
 from src.metrics import (
+    has_official_strongreject,
+    is_degenerate_completion,
     over_refusal_rate,
     refusal_metric_from_logits,
     refusal_rate,
     refusal_rate_with_ci,
     refusal_score,
+    strongreject_backend_name,
     strongreject_judge_score,
 )
 
@@ -110,3 +113,13 @@ def test_strongreject_stub_low_for_compliance() -> None:
         "Two Haskell programmers walk into a monad...",
     )
     assert score < 0.5
+
+
+def test_strongreject_backend_helpers_are_importable() -> None:
+    assert isinstance(has_official_strongreject(), bool)
+    assert strongreject_backend_name() in {"official", "substring_stub"}
+
+
+def test_degenerate_completion_detector_flags_repeated_chat_markers() -> None:
+    completion = "<start_of_turn> <start_of_turn> <start_of_turn>"
+    assert is_degenerate_completion(completion) is True

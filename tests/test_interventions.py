@@ -11,7 +11,7 @@ import pytest
 import torch
 from torch import nn
 
-from src.interventions import _ortho_embedding, _ortho_linear
+from src.interventions import _ortho_embedding, _ortho_linear, directional_ablation
 
 
 def _random_unit(d: int, *, seed: int = 0) -> torch.Tensor:
@@ -104,3 +104,12 @@ def test_ortho_linear_device_match_cpu() -> None:
         torch.zeros(8),
         atol=1e-5,
     )
+
+
+def test_directional_ablation_accepts_coefficient_argument() -> None:
+    """Kaggle notebook sweeps intervention strength via this public argument."""
+    import inspect
+
+    signature = inspect.signature(directional_ablation)
+    assert "coefficient" in signature.parameters
+    assert signature.parameters["coefficient"].default == 1.0

@@ -404,6 +404,35 @@ _OFFICIAL_SR_JUDGE = None
 _OFFICIAL_SR_IMPORT_OK: Optional[bool] = None
 
 
+def _ensure_official_strongreject_loaded() -> bool:
+    """Load and cache the optional official StrongREJECT judge if available."""
+    global _OFFICIAL_SR_JUDGE, _OFFICIAL_SR_IMPORT_OK
+
+    if _OFFICIAL_SR_IMPORT_OK is None:
+        try:
+            from strongreject.judge import AutograderJudge  # type: ignore
+            _OFFICIAL_SR_JUDGE = AutograderJudge()
+            _OFFICIAL_SR_IMPORT_OK = True
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[strongreject] official package unavailable ({exc}); "
+                "falling back to substring stub."
+            )
+            _OFFICIAL_SR_IMPORT_OK = False
+
+    return bool(_OFFICIAL_SR_IMPORT_OK and _OFFICIAL_SR_JUDGE is not None)
+
+
+def has_official_strongreject() -> bool:
+    """Return whether the optional official StrongREJECT judge is usable."""
+    return _ensure_official_strongreject_loaded()
+
+
+def strongreject_backend_name() -> str:
+    """Name the active StrongREJECT scoring backend for result metadata."""
+    return "official" if has_official_strongreject() else "substring_stub"
+
+
 def official_strongreject_judge_score(prompt: str, completion: str) -> float:
     """Return the official StrongREJECT judge score for one (prompt, completion).
 
@@ -438,6 +467,22 @@ def official_strongreject_judge_score(prompt: str, completion: str) -> float:
             return strongreject_judge_score(prompt, completion)
 
     return strongreject_judge_score(prompt, completion)
+
+
+def is_degenerate_completion(completion: str) -> bool:
+    """Detect outputs that should not count as meaningful intervention results."""
+    text = completion.strip()
+    if len(text) < 12:
+        return True
+
+    tokens = text.split()
+    if len(tokens) >= 8:
+        most_common = max(tokens.count(token) for token in set(tokens))
+        if most_common / len(tokens) >= 0.5:
+            return True
+
+    markers = ("<start_of_turn>", "<end_of_turn>", "<pad>", "<bos>", "<eos>")
+    return sum(text.count(marker) for marker in markers) >= 3
 
 
 def strongreject_judge_score(prompt: str, completion: str) -> float:

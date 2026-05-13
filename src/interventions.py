@@ -63,7 +63,6 @@ class InferenceSteering:
         self.model = model
         self.direction = direction.to(dtype=torch.float32)
         self.direction = self.direction / self.direction.norm()
-        self.direction = self.direction.to(device=model.device)
         self.layer_indices = layer_indices
         self._handles: List[torch.utils.hooks.RemovableHandle] = []
         self._norm_handle: Optional[torch.utils.hooks.RemovableHandle] = None
@@ -72,7 +71,7 @@ class InferenceSteering:
         """Create a forward-pre-hook for the given layer."""
         def hook(_module, inputs):
             x = inputs[0]  # (batch, seq_len, d_model)
-            d = self.direction.to(dtype=x.dtype)
+            d = self.direction.to(device=x.device, dtype=x.dtype)
             new_x = x - _project_onto(x, d)
             return (new_x,) + inputs[1:]
         return hook
@@ -93,7 +92,7 @@ class InferenceSteering:
         final_norm = get_final_norm_layer(self.model.model)
         if final_norm is not None:
             def _final_norm_hook(_module, _inputs, output):
-                d = self.direction.to(dtype=output.dtype)
+                d = self.direction.to(device=output.device, dtype=output.dtype)
                 return output - _project_onto(output, d)
             self._norm_handle = final_norm.register_forward_hook(_final_norm_hook)
 
@@ -134,6 +133,7 @@ def _project_onto(x: torch.Tensor, direction: torch.Tensor) -> torch.Tensor:
 def directional_ablation(
     model: RefusalModel,
     direction: torch.Tensor,
+    coefficient: float = 1.0,
 ) -> Iterator[None]:
     """Context manager that ablates `direction` from the residual stream at
     every layer and every token position for the duration of the `with` block.
@@ -151,14 +151,14 @@ def directional_ablation(
     """
     direction = direction.to(dtype=torch.float32)
     direction = direction / direction.norm()  # r̂
-    direction = direction.to(device=model.device)
+    coefficient = float(coefficient)
 
     def make_hook(_layer_idx: int):
         def hook(_module, inputs):
             x = inputs[0]  # (batch, seq_len, d_model)
-            d = direction.to(dtype=x.dtype)
+            d = direction.to(device=x.device, dtype=x.dtype)
             # Subtract the projection along r̂ from every token, every layer.
-            new_x = x - _project_onto(x, d)
+            new_x = x - coefficient * _project_onto(x, d)
             return (new_x,) + inputs[1:]
         return hook
 
@@ -171,8 +171,8 @@ def directional_ablation(
     norm_handle: Optional[torch.utils.hooks.RemovableHandle] = None
     if final_norm is not None:
         def _final_norm_hook(_module, _inputs, output):
-            d = direction.to(dtype=output.dtype)
-            return output - _project_onto(output, d)
+            d = direction.to(device=output.device, dtype=output.dtype)
+            return output - coefficient * _project_onto(output, d)
 
         norm_handle = final_norm.register_forward_hook(_final_norm_hook)
 
