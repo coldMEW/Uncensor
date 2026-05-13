@@ -68,3 +68,21 @@ def test_kaggle_notebook_uses_dataset_scale_contrastive_probe_set() -> None:
     assert "harmful_train" in source
     assert "harmless_train" in source
     assert "prompt_source" in source
+
+
+def test_kaggle_notebook_uses_ranked_layer_window_search() -> None:
+    source = _source()
+    assert "ranked_layer_indices" in source
+    assert "layer_window(" in source
+    assert "best_layer_idx" in source
+    assert "best_layer_window_radius_1" in source
+    assert "top_ranked_layers" in source
+
+
+def test_kaggle_notebook_sweeps_direction_subsets_before_expansion() -> None:
+    source = _source()
+    assert "direction_count" in source
+    assert "active_directions = directions[:cycle_config['direction_count']]" in source
+    assert "'direction_count': 1" in source
+    assert "'direction_count': 2" in source
+    assert "'direction_count': 3" in source
