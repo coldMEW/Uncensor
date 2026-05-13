@@ -134,6 +134,8 @@ def directional_ablation(
     model: RefusalModel,
     direction: torch.Tensor,
     coefficient: float = 1.0,
+    layer_indices: Optional[Sequence[int]] = None,
+    include_final_norm: bool = True,
 ) -> Iterator[None]:
     """Context manager that ablates `direction` from the residual stream at
     every layer and every token position for the duration of the `with` block.
@@ -162,14 +164,21 @@ def directional_ablation(
             return (new_x,) + inputs[1:]
         return hook
 
-    handles = model.register_forward_pre_hooks(make_hook)
+    if layer_indices is None:
+        handles = model.register_forward_pre_hooks(make_hook)
+    else:
+        handles = []
+        valid_indices = {int(idx) for idx in layer_indices}
+        for layer_idx, layer in enumerate(model.layers):
+            if layer_idx in valid_indices:
+                handles.append(layer.register_forward_pre_hook(make_hook(layer_idx)))
 
     # §3.2 — Register a forward hook on the final norm to close the
     # last-layer gap.  We use register_forward_hook (not pre_hook) because we
     # need to modify the *output* of the final norm before it reaches lm_head.
     final_norm = get_final_norm_layer(model.model)
     norm_handle: Optional[torch.utils.hooks.RemovableHandle] = None
-    if final_norm is not None:
+    if include_final_norm and final_norm is not None:
         def _final_norm_hook(_module, _inputs, output):
             d = direction.to(device=output.device, dtype=output.dtype)
             return output - coefficient * _project_onto(output, d)

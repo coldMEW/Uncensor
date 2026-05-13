@@ -113,3 +113,14 @@ def test_directional_ablation_accepts_coefficient_argument() -> None:
     signature = inspect.signature(directional_ablation)
     assert "coefficient" in signature.parameters
     assert signature.parameters["coefficient"].default == 1.0
+
+
+def test_directional_ablation_accepts_layer_targeting_arguments() -> None:
+    """Closed-loop optimization needs layer-local probes after all-layer collapse."""
+    import inspect
+
+    signature = inspect.signature(directional_ablation)
+    assert "layer_indices" in signature.parameters
+    assert signature.parameters["layer_indices"].default is None
+    assert "include_final_norm" in signature.parameters
+    assert signature.parameters["include_final_norm"].default is True
