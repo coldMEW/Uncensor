@@ -74,6 +74,47 @@ def test_kaggle_notebook_uses_dataset_scale_contrastive_probe_set() -> None:
     assert "prompt_source" in source
 
 
+def test_kaggle_notebook_uses_partial_dataset_loading_not_gated_all_or_nothing() -> None:
+    source = _source()
+    assert "allow_partial_sources=True" in source
+    assert "['walledai/MaliciousInstruct', 'walledai/HarmBench', 'walledai/AdvBench']" in source
+
+
+def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
+    source = _source()
+    assert "SEARCH_EVAL_LIMIT = 16" in source
+    assert "SEARCH_BENIGN_LIMIT = 16" in source
+    assert "FULL_VERIFY_LIMIT = 100" in source
+    assert "search_eval_prompts = eval_prompts[:min(SEARCH_EVAL_LIMIT, len(eval_prompts))]" in source
+    assert "search_benign_prompts = benign_control_prompts[:min(SEARCH_BENIGN_LIMIT, len(benign_control_prompts))]" in source
+    assert "final_verify_prompts = eval_prompts[:min(FULL_VERIFY_LIMIT, len(eval_prompts))]" in source
+    assert "final_verification" in source
+
+
+def test_kaggle_notebook_records_dual_probe_scores_without_raw_outputs() -> None:
+    source = _source()
+    assert "from src.probes import dual_probe_scores" in source
+    assert "'refusal_score': float(" in source
+    assert "'harmfulness_score': float(" in source
+    assert "print(f'BYPASSED: {bypassed_resp" not in source
+
+
+def test_kaggle_notebook_records_benchmark_matrix_and_dataset_scale_status() -> None:
+    source = _source()
+    assert "from src.benchmark_matrix import build_benchmark_matrix" in source
+    assert "'benchmark_matrix': benchmark_matrix" in source
+    assert "'dataset_scale_verified': bool(benchmark_matrix['dataset_scale'])" in source
+
+
+def test_kaggle_notebook_computes_benign_kl_for_candidate_ranking() -> None:
+    source = _source()
+    assert "from src.metrics import kl_divergence_from_logits" in source
+    assert "KL_PROMPT_LIMIT = 4" in source
+    assert "def last_token_logits(text):" in source
+    assert "'benign_kl': float(benign_kl)" in source
+    assert "constrained_candidate_score" in source
+
+
 def test_kaggle_notebook_uses_ranked_layer_window_search() -> None:
     source = _source()
     assert "ranked_layer_indices" in source

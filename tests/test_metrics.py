@@ -10,6 +10,7 @@ from src.metrics import (
     completion_quality_report,
     has_official_strongreject,
     is_degenerate_completion,
+    kl_divergence_from_logits,
     over_refusal_rate,
     refusal_metric_from_logits,
     refusal_rate,
@@ -44,6 +45,23 @@ def test_refusal_metric_clamp_no_inf() -> None:
     logits = torch.tensor([[1000.0, -1000.0, -1000.0, -1000.0]])
     out = refusal_metric_from_logits(logits, [0])
     assert torch.isfinite(out).all()
+
+
+def test_kl_divergence_from_logits_is_zero_for_identical_distributions() -> None:
+    logits = torch.tensor([[1.0, 2.0, 3.0]])
+
+    value = kl_divergence_from_logits(logits, logits)
+
+    assert value.item() == pytest.approx(0.0)
+
+
+def test_kl_divergence_from_logits_is_positive_for_changed_distributions() -> None:
+    reference = torch.tensor([[1.0, 2.0, 3.0]])
+    candidate = torch.tensor([[3.0, 2.0, 1.0]])
+
+    value = kl_divergence_from_logits(reference, candidate)
+
+    assert value.item() > 0.0
 
 
 # ---------------------------------------------------------------------------

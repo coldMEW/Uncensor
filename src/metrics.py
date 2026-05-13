@@ -72,6 +72,29 @@ def refusal_rate(completions: Sequence[str]) -> float:
     return sum(refusal_score(c) for c in completions) / len(completions)
 
 
+def kl_divergence_from_logits(
+    reference_logits: torch.Tensor,
+    candidate_logits: torch.Tensor,
+    *,
+    reduction: str = "batchmean",
+) -> torch.Tensor:
+    """KL(reference || candidate) over next-token distributions.
+
+    Use this as the benign logit-drift term when ranking intervention
+    candidates. Lower values indicate the candidate preserves the baseline
+    model distribution more closely.
+    """
+    reference_log_probs = F.log_softmax(reference_logits.to(torch.float32), dim=-1)
+    candidate_log_probs = F.log_softmax(candidate_logits.to(torch.float32), dim=-1)
+    value = F.kl_div(
+        candidate_log_probs,
+        reference_log_probs.exp(),
+        reduction=reduction,
+        log_target=False,
+    )
+    return value.clamp_min(0.0)
+
+
 # -----------------------------------------------------------------------------
 # §D.2 — safety_score (Llama Guard 2)
 # -----------------------------------------------------------------------------

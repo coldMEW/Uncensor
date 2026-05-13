@@ -95,15 +95,37 @@ HARMFUL_LOADERS = {
 }
 
 
-def load_harmful(sources: Sequence[str], seed: int) -> List[str]:
-    """Load and shuffle the union of the specified harmful sources (§2.2)."""
+def load_harmful(
+    sources: Sequence[str],
+    seed: int,
+    *,
+    allow_partial_sources: bool = False,
+) -> List[str]:
+    """Load and shuffle the union of the specified harmful sources (§2.2).
+
+    Some public benchmark mirrors are gated or intermittently unavailable on
+    Kaggle. When ``allow_partial_sources`` is enabled, one failed source is
+    logged and skipped instead of collapsing the whole dataset-scale run.
+    """
     prompts: List[str] = []
     for src in sources:
         if src not in HARMFUL_LOADERS:
             raise ValueError(f"Unknown harmful source: {src}")
-        prompts.extend(HARMFUL_LOADERS[src]())
+        try:
+            loaded = HARMFUL_LOADERS[src]()
+        except Exception as exc:
+            if not allow_partial_sources:
+                raise
+            logger.warning("Skipping harmful source %s after load failure: %s", src, exc)
+            continue
+        prompts.extend(loaded)
     # Deduplicate on exact string.
     prompts = list(dict.fromkeys(prompts))
+    if not prompts:
+        raise RuntimeError(
+            "No harmful prompts loaded from requested sources. "
+            "Check dataset access or disable partial loading to see the first source error."
+        )
     rng = random.Random(seed)
     rng.shuffle(prompts)
     return prompts
@@ -458,6 +480,7 @@ def build_splits(
     load_wildjailbreak_eval: bool = False,
     n_strongreject: int = 100,
     n_wildjailbreak: int = 100,
+    allow_partial_sources: bool = False,
 ) -> Splits:
     """Build the paper's canonical splits (§2.2, §3.1, §3.2) with optional
     additional evaluation sets (§3.5).
@@ -486,8 +509,15 @@ def build_splits(
         Maximum number of StrongREJECT prompts to load.
     n_wildjailbreak:
         Maximum number of WildJailbreak prompts to load.
+    allow_partial_sources:
+        If ``True``, skip individual harmful sources that fail to load while
+        preserving the rest of the dataset-backed run.
     """
-    harmful = load_harmful(harmful_sources, seed)
+    harmful = load_harmful(
+        harmful_sources,
+        seed,
+        allow_partial_sources=allow_partial_sources,
+    )
     harmless = load_harmless(seed)
     bypass = load_jailbreakbench(n_bypass_eval)
 
