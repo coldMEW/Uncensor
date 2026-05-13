@@ -16,6 +16,7 @@ from src.extraction import (
     difference_in_means,
     project_out_subspace,
     select_best,
+    winsorize_activations,
 )
 
 
@@ -283,3 +284,42 @@ def test_whitened_svd_vs_plain_svd() -> None:
     diff = (svd_dir - wsvd_dir).norm().item()
     assert diff > 0.01, "Whitened SVD should differ from plain SVD on anisotropic data"
 
+
+def test_winsorize_activations_clamps_outliers_without_shape_change() -> None:
+    """Activation winsorization should keep tensor shape and clamp extremes."""
+    acts = torch.tensor(
+        [[[[0.0, 1.0, 2.0], [3.0, 4.0, 1000.0], [-1000.0, 5.0, 6.0]]]],
+        dtype=torch.float32,
+    )
+
+    clipped = winsorize_activations(acts, percentile=0.2)
+
+    assert clipped.shape == acts.shape
+    assert clipped.max() < 1000.0
+    assert clipped.min() > -1000.0
+    assert torch.isfinite(clipped).all()
+
+
+def test_svd_extraction_can_winsorize_before_direction_selection() -> None:
+    """SVD extraction should expose OBLITERATUS-style outlier suppression."""
+    from src.extraction import svd_extraction
+
+    torch.manual_seed(0)
+    d_model = 16
+    harmful = torch.randn(1, 1, 12, d_model)
+    harmless = torch.randn(1, 1, 12, d_model)
+    harmful[0, 0, 0, 0] = 10000.0
+
+    plain = svd_extraction(harmful, harmless, layer_idx=0, pos_idx=0, n_directions=1)
+    robust = svd_extraction(
+        harmful,
+        harmless,
+        layer_idx=0,
+        pos_idx=0,
+        n_directions=1,
+        winsorize_percentile=0.1,
+    )
+
+    assert plain.shape == robust.shape == (1, d_model)
+    assert abs(robust[0].norm().item() - 1.0) < 0.01
+    assert torch.dot(plain[0], robust[0]).abs() < 0.999

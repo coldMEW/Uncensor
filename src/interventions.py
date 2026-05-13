@@ -380,6 +380,9 @@ def orthogonalize_weights(
 def multi_directional_ablation(
     model: RefusalModel,
     directions: Sequence[torch.Tensor],
+    coefficient: float = 1.0,
+    layer_indices: Optional[Sequence[int]] = None,
+    include_final_norm: bool = True,
 ) -> Iterator[None]:
     """Context manager that ablates *multiple* directions from the residual
     stream at every layer and token position.
@@ -397,6 +400,8 @@ def multi_directional_ablation(
     Also registers a final-norm hook (§3.2 fix) for the same reason as
     ``directional_ablation``.
     """
+    coefficient = float(coefficient)
+
     # Normalize and move all directions to model device.
     unit_dirs: List[torch.Tensor] = []
     for d in directions:
@@ -409,21 +414,28 @@ def multi_directional_ablation(
             x = inputs[0]  # (batch, seq_len, d_model)
             for r_hat in unit_dirs:
                 r = r_hat.to(dtype=x.dtype)
-                x = x - _project_onto(x, r)
+                x = x - coefficient * _project_onto(x, r)
             return (x,) + inputs[1:]
         return hook
 
-    handles = model.register_forward_pre_hooks(make_hook)
+    if layer_indices is None:
+        handles = model.register_forward_pre_hooks(make_hook)
+    else:
+        handles = []
+        valid_indices = {int(idx) for idx in layer_indices}
+        for layer_idx, layer in enumerate(model.layers):
+            if layer_idx in valid_indices:
+                handles.append(layer.register_forward_pre_hook(make_hook(layer_idx)))
 
     # §3.2 — final norm hook
     final_norm = get_final_norm_layer(model.model)
     norm_handle: Optional[torch.utils.hooks.RemovableHandle] = None
-    if final_norm is not None:
+    if include_final_norm and final_norm is not None:
         def _final_norm_hook(_module, _inputs, output):
             x = output
             for r_hat in unit_dirs:
                 r = r_hat.to(dtype=x.dtype)
-                x = x - _project_onto(x, r)
+                x = x - coefficient * _project_onto(x, r)
             return x
 
         norm_handle = final_norm.register_forward_hook(_final_norm_hook)

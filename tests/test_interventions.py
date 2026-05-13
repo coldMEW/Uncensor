@@ -11,7 +11,12 @@ import pytest
 import torch
 from torch import nn
 
-from src.interventions import _ortho_embedding, _ortho_linear, directional_ablation
+from src.interventions import (
+    _ortho_embedding,
+    _ortho_linear,
+    directional_ablation,
+    multi_directional_ablation,
+)
 
 
 def _random_unit(d: int, *, seed: int = 0) -> torch.Tensor:
@@ -120,6 +125,19 @@ def test_directional_ablation_accepts_layer_targeting_arguments() -> None:
     import inspect
 
     signature = inspect.signature(directional_ablation)
+    assert "layer_indices" in signature.parameters
+    assert signature.parameters["layer_indices"].default is None
+    assert "include_final_norm" in signature.parameters
+    assert signature.parameters["include_final_norm"].default is True
+
+
+def test_multi_directional_ablation_accepts_closed_loop_controls() -> None:
+    """OBLITERATUS-style multi-direction sweeps need the same safety controls."""
+    import inspect
+
+    signature = inspect.signature(multi_directional_ablation)
+    assert "coefficient" in signature.parameters
+    assert signature.parameters["coefficient"].default == 1.0
     assert "layer_indices" in signature.parameters
     assert signature.parameters["layer_indices"].default is None
     assert "include_final_norm" in signature.parameters

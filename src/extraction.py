@@ -989,12 +989,35 @@ def gradient_direction_extraction(
 # =============================================================================
 # SVD-based Direction Extraction (OBLITERATUS key feature)
 # =============================================================================
+def winsorize_activations(
+    activations: torch.Tensor,
+    percentile: float = 0.01,
+) -> torch.Tensor:
+    """Clamp activation outliers by symmetric quantiles.
+
+    OBLITERATUS and Heretic-style pipelines suppress extreme activation rows
+    before SVD so a single outlier prompt cannot dominate the extracted
+    direction. ``percentile`` is the lower-tail fraction to clamp; values <= 0
+    return a clone unchanged.
+    """
+    if percentile <= 0:
+        return activations.clone()
+    if percentile >= 0.5:
+        raise ValueError("percentile must be in [0, 0.5)")
+
+    flat = activations.float().reshape(-1)
+    lower = torch.quantile(flat, percentile)
+    upper = torch.quantile(flat, 1.0 - percentile)
+    return torch.clamp(activations, min=lower.item(), max=upper.item())
+
+
 def svd_extraction(
     harmful_acts: torch.Tensor,
     harmless_acts: torch.Tensor,
     layer_idx: int,
     pos_idx: int,
     n_directions: int = 1,
+    winsorize_percentile: float = 0.0,
 ) -> torch.Tensor:
     """Extract refusal direction via SVD decomposition on activation covariance.
 
@@ -1008,10 +1031,15 @@ def svd_extraction(
         layer_idx: Which transformer layer to analyze
         pos_idx: Which token-position index
         n_directions: Number of SVD directions to extract (default 1)
+        winsorize_percentile: Optional symmetric quantile clamp before SVD.
 
     Returns:
         Unit-norm direction(s) of shape ``(n_directions, d_model)``
     """
+    if winsorize_percentile > 0:
+        harmful_acts = winsorize_activations(harmful_acts, winsorize_percentile)
+        harmless_acts = winsorize_activations(harmless_acts, winsorize_percentile)
+
     H = harmful_acts[layer_idx, pos_idx].float()    # (n_h, d_model)
     N = harmless_acts[layer_idx, pos_idx].float()   # (n_n, d_model)
 

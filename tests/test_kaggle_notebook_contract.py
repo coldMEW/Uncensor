@@ -50,3 +50,21 @@ def test_kaggle_notebook_runs_second_layer_local_cycle_after_failure() -> None:
     assert "layer_indices=cycle_config['layer_indices']" in source
     assert "include_final_norm=cycle_config['include_final_norm']" in source
     assert "'cycle_index': 3" in source
+
+
+def test_kaggle_notebook_uses_multidirection_svd_not_global_mean_only() -> None:
+    source = _source()
+    assert "svd_extraction" in source
+    assert "winsorize_percentile" in source
+    assert "directions =" in source
+    assert "multi_directional_ablation" in source
+    assert "direction_candidates.mean(dim=(0, 1))" not in source
+
+
+def test_kaggle_notebook_uses_dataset_scale_contrastive_probe_set() -> None:
+    source = _source()
+    assert "MAX_TRAIN_PROMPTS = 512" in source
+    assert "build_splits" in source
+    assert "harmful_train" in source
+    assert "harmless_train" in source
+    assert "prompt_source" in source
