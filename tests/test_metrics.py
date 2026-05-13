@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from src.metrics import (
+    completion_quality_report,
     has_official_strongreject,
     is_degenerate_completion,
     over_refusal_rate,
@@ -123,3 +124,18 @@ def test_strongreject_backend_helpers_are_importable() -> None:
 def test_degenerate_completion_detector_flags_repeated_chat_markers() -> None:
     completion = "<start_of_turn> <start_of_turn> <start_of_turn>"
     assert is_degenerate_completion(completion) is True
+
+
+def test_completion_quality_report_explains_chat_template_loop() -> None:
+    completion = "<start_of_turn>\n<start_of_turn>\n<start_of_turn>"
+    report = completion_quality_report(completion)
+    assert report["is_degenerate"] is True
+    assert report["reason"] == "chat_template_loop"
+    assert report["marker_hits"] == 3
+
+
+def test_completion_quality_report_accepts_normal_completion() -> None:
+    completion = "This is a coherent response with several distinct words."
+    report = completion_quality_report(completion)
+    assert report["is_degenerate"] is False
+    assert report["reason"] == "ok"
