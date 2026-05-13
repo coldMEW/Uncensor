@@ -307,8 +307,8 @@ class RefusalModel:
                 from bitsandbytes.nn import BitsAndBytesConfig
             except ImportError:
                 raise ImportError(
-                    "quantization requires `bitsandbytes` package with BitsAndBytesConfig. "
-                    "Install with: pip install bitsandbytes>=0.41.0"
+"quantization requires `bitsandbytes>=0.41.0` with BitsAndBytesConfig. "
+                    "Current version lacks this class. Install: pip install --upgrade bitsandbytes"
                 )
 
         if quantization == "8bit":
