@@ -1,6 +1,7 @@
 """Contract tests for the Kaggle evaluation notebook generator."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -77,7 +78,16 @@ def test_kaggle_notebook_uses_dataset_scale_contrastive_probe_set() -> None:
 def test_kaggle_notebook_uses_partial_dataset_loading_not_gated_all_or_nothing() -> None:
     source = _source()
     assert "allow_partial_sources=True" in source
+    assert "min_partial_train=64" in source
     assert "['walledai/MaliciousInstruct', 'walledai/HarmBench', 'walledai/AdvBench']" in source
+
+
+def test_kaggle_notebook_supports_multiple_hf_secret_names_without_literal_token() -> None:
+    source = _source()
+    assert "'HF_TOKEN'" in source
+    assert "'HUGGINGFACE_TOKEN'" in source
+    assert "'HF_READ_TOKEN'" in source
+    assert re.search(r"hf_[A-Za-z0-9]{20,}", source) is None
 
 
 def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:

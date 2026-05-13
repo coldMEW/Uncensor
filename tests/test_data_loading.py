@@ -55,3 +55,25 @@ def test_build_splits_passes_partial_loading_to_harmful_sources(monkeypatch: pyt
 
     assert len(splits.harmful_train) == 5
     assert len(splits.induce_eval) == 4
+
+
+def test_build_splits_can_downshift_train_size_for_partial_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(data, "load_harmful", lambda sources, seed, *, allow_partial_sources=False: [f"harmful-{idx}" for idx in range(100)])
+    monkeypatch.setattr(data, "load_harmless", lambda seed: [f"harmless-{idx}" for idx in range(300)])
+    monkeypatch.setattr(data, "load_jailbreakbench", lambda n: [f"eval-{idx}" for idx in range(n)])
+
+    splits = data.build_splits(
+        harmful_sources=["open/source"],
+        n_train=512,
+        n_val=32,
+        n_bypass_eval=100,
+        n_induce_eval=100,
+        seed=0,
+        allow_partial_sources=True,
+        min_partial_train=64,
+    )
+
+    assert len(splits.harmful_train) == 68
+    assert len(splits.harmful_val) == 32
+    assert len(splits.harmless_train) == 68
+    assert len(splits.harmless_val) == 32

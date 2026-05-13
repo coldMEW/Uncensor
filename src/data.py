@@ -481,6 +481,7 @@ def build_splits(
     n_strongreject: int = 100,
     n_wildjailbreak: int = 100,
     allow_partial_sources: bool = False,
+    min_partial_train: Optional[int] = None,
 ) -> Splits:
     """Build the paper's canonical splits (§2.2, §3.1, §3.2) with optional
     additional evaluation sets (§3.5).
@@ -512,6 +513,10 @@ def build_splits(
     allow_partial_sources:
         If ``True``, skip individual harmful sources that fail to load while
         preserving the rest of the dataset-backed run.
+    min_partial_train:
+        Optional lower bound for a smaller dataset-backed training split when
+        partial source loading returns fewer than ``n_train + n_val`` harmful
+        prompts. If omitted, split sizes remain strict.
     """
     harmful = load_harmful(
         harmful_sources,
@@ -526,9 +531,24 @@ def build_splits(
     harmful = [p for p in harmful if p not in bypass_set]
 
     if len(harmful) < n_train + n_val:
-        raise RuntimeError(
-            f"Not enough harmful instructions after filtering: {len(harmful)} < {n_train + n_val}"
-        )
+        if allow_partial_sources and min_partial_train is not None:
+            adjusted_train = len(harmful) - n_val
+            if adjusted_train >= min_partial_train:
+                logger.warning(
+                    "Downshifting harmful train split from %s to %s after partial dataset loading.",
+                    n_train,
+                    adjusted_train,
+                )
+                n_train = adjusted_train
+            else:
+                raise RuntimeError(
+                    "Not enough harmful instructions after filtering for partial split: "
+                    f"{len(harmful)} available, need at least {min_partial_train + n_val}"
+                )
+        else:
+            raise RuntimeError(
+                f"Not enough harmful instructions after filtering: {len(harmful)} < {n_train + n_val}"
+            )
     if len(harmless) < n_train + n_val + n_induce_eval:
         raise RuntimeError(
             f"Not enough harmless instructions: need {n_train + n_val + n_induce_eval}, got {len(harmless)}"
