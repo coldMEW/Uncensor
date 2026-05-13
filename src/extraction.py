@@ -992,13 +992,16 @@ def gradient_direction_extraction(
 def winsorize_activations(
     activations: torch.Tensor,
     percentile: float = 0.01,
+    max_quantile_elements: int = 1_000_000,
 ) -> torch.Tensor:
     """Clamp activation outliers by symmetric quantiles.
 
     OBLITERATUS and Heretic-style pipelines suppress extreme activation rows
     before SVD so a single outlier prompt cannot dominate the extracted
     direction. ``percentile`` is the lower-tail fraction to clamp; values <= 0
-    return a clone unchanged.
+    return a clone unchanged. Quantiles are estimated from a bounded
+    deterministic sample because some GPU-backed PyTorch builds reject very
+    large quantile inputs.
     """
     if percentile <= 0:
         return activations.clone()
@@ -1006,8 +1009,15 @@ def winsorize_activations(
         raise ValueError("percentile must be in [0, 0.5)")
 
     flat = activations.float().reshape(-1)
-    lower = torch.quantile(flat, percentile)
-    upper = torch.quantile(flat, 1.0 - percentile)
+    if max_quantile_elements <= 0:
+        raise ValueError("max_quantile_elements must be positive")
+    if flat.numel() > max_quantile_elements:
+        step = (flat.numel() + max_quantile_elements - 1) // max_quantile_elements
+        flat_for_quantile = flat[::step][:max_quantile_elements]
+    else:
+        flat_for_quantile = flat
+    lower = torch.quantile(flat_for_quantile, percentile)
+    upper = torch.quantile(flat_for_quantile, 1.0 - percentile)
     return torch.clamp(activations, min=lower.item(), max=upper.item())
 
 

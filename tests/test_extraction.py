@@ -300,6 +300,28 @@ def test_winsorize_activations_clamps_outliers_without_shape_change() -> None:
     assert torch.isfinite(clipped).all()
 
 
+def test_winsorize_activations_samples_before_quantile_for_large_tensors(monkeypatch) -> None:
+    """Kaggle can reject torch.quantile on huge flattened activation tensors."""
+    acts = torch.linspace(-1000.0, 1000.0, steps=200).reshape(2, 2, 10, 5)
+    original_quantile = torch.quantile
+    seen_numels: list[int] = []
+
+    def limited_quantile(input_tensor, q, *args, **kwargs):
+        seen_numels.append(input_tensor.numel())
+        if input_tensor.numel() > 50:
+            raise RuntimeError("quantile() input tensor is too large")
+        return original_quantile(input_tensor, q, *args, **kwargs)
+
+    monkeypatch.setattr(torch, "quantile", limited_quantile)
+
+    clipped = winsorize_activations(acts, percentile=0.1, max_quantile_elements=50)
+
+    assert clipped.shape == acts.shape
+    assert max(seen_numels) <= 50
+    assert clipped.max() < acts.max()
+    assert clipped.min() > acts.min()
+
+
 def test_svd_extraction_can_winsorize_before_direction_selection() -> None:
     """SVD extraction should expose OBLITERATUS-style outlier suppression."""
     from src.extraction import svd_extraction
