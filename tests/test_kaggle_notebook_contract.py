@@ -86,3 +86,12 @@ def test_kaggle_notebook_sweeps_direction_subsets_before_expansion() -> None:
     assert "'direction_count': 1" in source
     assert "'direction_count': 2" in source
     assert "'direction_count': 3" in source
+
+
+def test_kaggle_notebook_expands_when_quality_is_preserved_but_movement_is_low() -> None:
+    source = _source()
+    assert "top_ranked_layers_wide" in source
+    assert "best_layer_window_radius_4" in source
+    assert "'layer_strategy': 'top_ranked_layers_wide_no_regression_expansion'" in source
+    assert "'layer_strategy': 'best_layer_window_radius_4_no_regression_expansion'" in source
+    assert "'coefficient_grid': [0.20, 0.30, 0.40, 0.50, 0.60]" in source
