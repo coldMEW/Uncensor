@@ -46,5 +46,7 @@ def test_kaggle_notebook_runs_second_layer_local_cycle_after_failure() -> None:
     source = _source()
     assert "optimization_cycles" in source
     assert "middle_layer_indices" in source
+    assert "expanded_layer_indices" in source
     assert "layer_indices=cycle_config['layer_indices']" in source
     assert "include_final_norm=cycle_config['include_final_norm']" in source
+    assert "'cycle_index': 3" in source
