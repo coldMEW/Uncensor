@@ -77,3 +77,39 @@ def test_build_splits_can_downshift_train_size_for_partial_dataset(monkeypatch: 
     assert len(splits.harmful_val) == 32
     assert len(splits.harmless_train) == 68
     assert len(splits.harmless_val) == 32
+
+
+def test_optional_eval_sets_have_local_fallbacks_when_hub_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(data, "load_dataset", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))
+
+    xstest = data.load_xstest()
+    strongreject = data.load_strongreject(n=100)
+
+    assert len(xstest) >= 100
+    assert len(strongreject) == 100
+    assert any("knife" in prompt.lower() for prompt in xstest)
+    assert len(set(strongreject)) == 100
+
+
+def test_build_splits_reports_local_optional_eval_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(data, "load_harmful", lambda sources, seed, *, allow_partial_sources=False: [f"harmful-{idx}" for idx in range(80)])
+    monkeypatch.setattr(data, "load_harmless", lambda seed: [f"harmless-{idx}" for idx in range(180)])
+    monkeypatch.setattr(data, "load_jailbreakbench", lambda n: [f"eval-{idx}" for idx in range(n)])
+    monkeypatch.setattr(data, "load_dataset", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))
+
+    splits = data.build_splits(
+        harmful_sources=["open/source"],
+        n_train=32,
+        n_val=8,
+        n_bypass_eval=20,
+        n_induce_eval=20,
+        seed=0,
+        load_xstest_eval=True,
+        load_strongreject_eval=True,
+        n_strongreject=20,
+    )
+
+    assert splits.source_metadata["xstest"] == "local_fallback"
+    assert splits.source_metadata["strongreject"] == "local_fallback"
+    assert len(splits.xstest_eval or []) >= 100
+    assert len(splits.strongreject_eval or []) == 20

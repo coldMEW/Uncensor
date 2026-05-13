@@ -10,8 +10,9 @@ Paper: https://arxiv.org/abs/2406.11717
 
 from __future__ import annotations
 
+import importlib
 import math
-from typing import Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 import torch
 import torch.nn.functional as F
@@ -419,72 +420,101 @@ def run_capability_benchmarks(
 
 
 # §6.1 — Optional real StrongREJECT judge (arXiv:2402.10260).
-# When the official `strongreject` package is installed, users can call
-# official_strongreject_judge_score(prompt, completion) to get the true
-# LLM-as-judge score.  We cache the judge on first use because its
-# backend classifier is expensive to initialise.
+# We support both package names seen in practice:
+# - `strongreject.judge.AutograderJudge`
+# - `strong_reject.evaluate.judge_completions`
+#
+# The Kaggle notebook installs the GitHub `strong_reject` package, while older
+# code expected `strongreject`. Keep one authoritative adapter here so result
+# metadata can say exactly which backend was used.
 _OFFICIAL_SR_JUDGE = None
 _OFFICIAL_SR_IMPORT_OK: Optional[bool] = None
+_OFFICIAL_SR_BACKEND_NAME = "substring_stub"
+_OFFICIAL_SR_SCORE_FN: Optional[Callable[[str, str], float]] = None
+
+
+def reset_strongreject_backend_cache() -> None:
+    """Reset cached optional StrongREJECT backend state for tests."""
+    global _OFFICIAL_SR_JUDGE, _OFFICIAL_SR_IMPORT_OK, _OFFICIAL_SR_BACKEND_NAME, _OFFICIAL_SR_SCORE_FN
+    _OFFICIAL_SR_JUDGE = None
+    _OFFICIAL_SR_IMPORT_OK = None
+    _OFFICIAL_SR_BACKEND_NAME = "substring_stub"
+    _OFFICIAL_SR_SCORE_FN = None
+
+
+def _coerce_strongreject_score(value: Any) -> float:
+    if isinstance(value, dict):
+        for key in ("score", "refusal_score", "strongreject_score"):
+            if key in value:
+                return float(value[key])
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return 0.0
+        return _coerce_strongreject_score(value[0])
+    return float(value)
 
 
 def _ensure_official_strongreject_loaded() -> bool:
-    """Load and cache the optional official StrongREJECT judge if available."""
-    global _OFFICIAL_SR_JUDGE, _OFFICIAL_SR_IMPORT_OK
+    """Load and cache the best available official StrongREJECT backend."""
+    global _OFFICIAL_SR_JUDGE, _OFFICIAL_SR_IMPORT_OK, _OFFICIAL_SR_BACKEND_NAME, _OFFICIAL_SR_SCORE_FN
 
     if _OFFICIAL_SR_IMPORT_OK is None:
         try:
-            from strongreject.judge import AutograderJudge  # type: ignore
-            _OFFICIAL_SR_JUDGE = AutograderJudge()
+            module = importlib.import_module("strongreject.judge")
+            autograder_judge = getattr(module, "AutograderJudge")
+            _OFFICIAL_SR_JUDGE = autograder_judge()
+            _OFFICIAL_SR_BACKEND_NAME = "official_autograder"
             _OFFICIAL_SR_IMPORT_OK = True
-        except Exception as exc:  # noqa: BLE001
-            print(
-                f"[strongreject] official package unavailable ({exc}); "
-                "falling back to substring stub."
-            )
-            _OFFICIAL_SR_IMPORT_OK = False
+        except Exception as first_exc:  # noqa: BLE001
+            try:
+                module = importlib.import_module("strong_reject.evaluate")
+                judge_completions = getattr(module, "judge_completions")
 
-    return bool(_OFFICIAL_SR_IMPORT_OK and _OFFICIAL_SR_JUDGE is not None)
+                def score_fn(prompt: str, completion: str) -> float:
+                    try:
+                        value = judge_completions([{"forbidden_prompt": prompt, "response": completion}])
+                    except TypeError:
+                        value = judge_completions([(prompt, completion)])
+                    return _coerce_strongreject_score(value)
+
+                _OFFICIAL_SR_SCORE_FN = score_fn
+                _OFFICIAL_SR_BACKEND_NAME = "official_function"
+                _OFFICIAL_SR_IMPORT_OK = True
+            except Exception as second_exc:  # noqa: BLE001
+                print(
+                    f"[strongreject] official package unavailable ({first_exc}; {second_exc}); "
+                    "falling back to substring stub."
+                )
+                _OFFICIAL_SR_BACKEND_NAME = "substring_stub"
+                _OFFICIAL_SR_IMPORT_OK = False
+
+    return bool(_OFFICIAL_SR_IMPORT_OK and (_OFFICIAL_SR_JUDGE is not None or _OFFICIAL_SR_SCORE_FN is not None))
 
 
 def has_official_strongreject() -> bool:
-    """Return whether the optional official StrongREJECT judge is usable."""
+    """Return whether an official StrongREJECT backend is usable."""
     return _ensure_official_strongreject_loaded()
 
 
 def strongreject_backend_name() -> str:
     """Name the active StrongREJECT scoring backend for result metadata."""
-    return "official" if has_official_strongreject() else "substring_stub"
+    has_official_strongreject()
+    return _OFFICIAL_SR_BACKEND_NAME
 
 
 def official_strongreject_judge_score(prompt: str, completion: str) -> float:
-    """Return the official StrongREJECT judge score for one (prompt, completion).
-
-    Falls back to :func:`strongreject_judge_score` (the substring stub) if the
-    official ``strongreject`` package is not installed. Returns a float in
-    ``[0, 1]`` where higher means more refusal.
-
-    This is the hook that :func:`pipeline.run_pipeline_enhanced` uses when
-    ``evaluation.use_official_strongreject: true`` is set in the config.
-    """
-    global _OFFICIAL_SR_JUDGE, _OFFICIAL_SR_IMPORT_OK
-
-    if _OFFICIAL_SR_IMPORT_OK is None:
-        try:
-            from strongreject.judge import AutograderJudge  # type: ignore
-            _OFFICIAL_SR_JUDGE = AutograderJudge()
-            _OFFICIAL_SR_IMPORT_OK = True
-        except Exception as exc:  # noqa: BLE001 — catch-all, deliberate
-            print(
-                f"[strongreject] official package unavailable ({exc}); "
-                "falling back to substring stub."
-            )
-            _OFFICIAL_SR_IMPORT_OK = False
+    """Return the best available StrongREJECT-style score for one pair."""
+    _ensure_official_strongreject_loaded()
 
     if _OFFICIAL_SR_IMPORT_OK and _OFFICIAL_SR_JUDGE is not None:
         try:
-            return float(
-                _OFFICIAL_SR_JUDGE.judge(prompt=prompt, response=completion)
-            )
+            return float(_OFFICIAL_SR_JUDGE.judge(prompt=prompt, response=completion))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[strongreject] judge call failed ({exc}); using stub.")
+            return strongreject_judge_score(prompt, completion)
+    if _OFFICIAL_SR_IMPORT_OK and _OFFICIAL_SR_SCORE_FN is not None:
+        try:
+            return float(_OFFICIAL_SR_SCORE_FN(prompt, completion))
         except Exception as exc:  # noqa: BLE001
             print(f"[strongreject] judge call failed ({exc}); using stub.")
             return strongreject_judge_score(prompt, completion)

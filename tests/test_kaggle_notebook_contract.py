@@ -101,6 +101,19 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     assert "final_verification" in source
 
 
+def test_kaggle_notebook_filters_search_to_baseline_refusals() -> None:
+    source = _source()
+    assert "baseline_refusing_items" in source
+    assert "SEARCH_MIN_BASELINE_REFUSALS" in source
+    assert "Filtered search prompts to" in source
+
+
+def test_kaggle_notebook_logs_strongreject_import_probe() -> None:
+    source = _source()
+    assert "StrongREJECT import probes" in source
+    assert "strong_reject.evaluate" in source
+
+
 def test_kaggle_notebook_records_dual_probe_scores_without_raw_outputs() -> None:
     source = _source()
     assert "from src.probes import dual_probe_scores" in source
@@ -113,6 +126,7 @@ def test_kaggle_notebook_records_benchmark_matrix_and_dataset_scale_status() -> 
     source = _source()
     assert "from src.benchmark_matrix import build_benchmark_matrix" in source
     assert "'benchmark_matrix': benchmark_matrix" in source
+    assert "'benchmark_source_metadata': benchmark_source_metadata" in source
     assert "'dataset_scale_verified': bool(benchmark_matrix['dataset_scale'])" in source
 
 
