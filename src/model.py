@@ -299,13 +299,17 @@ class RefusalModel:
             ).to(self.device)
 
         # Quantization mode - requires bitsandbytes
+        # Handle different import paths for different versions
         try:
             from bitsandbytes import BitsAndBytesConfig
         except ImportError:
-            raise ImportError(
-                "quantization requires `bitsandbytes` package. "
-                "Install with: pip install bitsandbytes"
-            )
+            try:
+                from bitsandbytes.nn import BitsAndBytesConfig
+            except ImportError:
+                raise ImportError(
+                    "quantization requires `bitsandbytes` package with BitsAndBytesConfig. "
+                    "Install with: pip install bitsandbytes>=0.41.0"
+                )
 
         if quantization == "8bit":
             quant_config = BitsAndBytesConfig(
