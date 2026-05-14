@@ -16,6 +16,7 @@ from .metrics import (
 )
 from .generate import generate_batched
 from .pipeline import run_pipeline, run_pipeline_enhanced, PipelineResult, score_candidates
+from .autoresearch import run_config_sweep, load_shared_model
 from .utils import detect_family, format_prompt, resolve_refusal_tokens, set_seed
 
 __all__ = [
@@ -42,6 +43,8 @@ __all__ = [
     "run_pipeline_enhanced",
     "PipelineResult",
     "score_candidates",
+    "run_config_sweep",
+    "load_shared_model",
     "detect_family",
     "format_prompt",
     "resolve_refusal_tokens",

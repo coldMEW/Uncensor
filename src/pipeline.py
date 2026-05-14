@@ -337,7 +337,11 @@ class PipelineResult:
 # =============================================================================
 
 
-def run_pipeline_enhanced(cfg: Dict) -> Tuple[PipelineResult, List[torch.Tensor]]:
+def run_pipeline_enhanced(
+    cfg: Dict,
+    *,
+    preloaded_model: Optional[RefusalModel] = None,
+) -> Tuple[PipelineResult, List[torch.Tensor]]:
     """Enhanced pipeline with all RESEARCH_PLAN.md improvements.
 
     Steps:
@@ -366,6 +370,9 @@ def run_pipeline_enhanced(cfg: Dict) -> Tuple[PipelineResult, List[torch.Tensor]
             Extended keys in ``evaluation``:
             ``load_xstest_eval`` (bool, default False),
             ``load_strongreject_eval`` (bool, default False).
+        preloaded_model: Optional already-loaded :class:`RefusalModel`. Use this
+            for in-process sweeps so candidate configs reuse the same model
+            weights/tokenizer instead of paying load/download overhead each run.
 
     Returns:
         Tuple of (PipelineResult with all metrics, list of direction tensors).
@@ -377,7 +384,7 @@ def run_pipeline_enhanced(cfg: Dict) -> Tuple[PipelineResult, List[torch.Tensor]
     stage_timings: Dict[str, float] = {}
     _t0 = time.perf_counter()
 
-    model = RefusalModel(
+    model = preloaded_model or RefusalModel(
         name=cfg["model"]["name"],
         dtype=cfg["model"]["dtype"],
         device=cfg["model"]["device"],
@@ -1022,7 +1029,11 @@ def run_pipeline_enhanced(cfg: Dict) -> Tuple[PipelineResult, List[torch.Tensor]
 # Original pipeline — backward-compatible wrapper
 # =============================================================================
 
-def run_pipeline(cfg: Dict) -> Tuple[PipelineResult, torch.Tensor]:
+def run_pipeline(
+    cfg: Dict,
+    *,
+    preloaded_model: Optional[RefusalModel] = None,
+) -> Tuple[PipelineResult, torch.Tensor]:
     """Run the full refusal-direction pipeline on a single model.
 
     This is the backward-compatible entry point. It delegates to
@@ -1033,7 +1044,7 @@ def run_pipeline(cfg: Dict) -> Tuple[PipelineResult, torch.Tensor]:
     """
     # Build an enhanced config that uses defaults for new keys.
     enhanced_cfg = _inject_defaults(cfg)
-    result, directions = run_pipeline_enhanced(enhanced_cfg)
+    result, directions = run_pipeline_enhanced(enhanced_cfg, preloaded_model=preloaded_model)
 
     # Return only the primary direction for backward compatibility.
     primary = directions[0] if directions else torch.zeros(1)
