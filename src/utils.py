@@ -98,13 +98,12 @@ def format_prompt(instruction: str, family: Optional[str], tokenizer) -> str:
     """
     if family is not None and family in CHAT_TEMPLATES and CHAT_TEMPLATES[family]:
         return CHAT_TEMPLATES[family].format(x=instruction)
-    if getattr(tokenizer, "chat_template", None):
-        return tokenizer.apply_chat_template(
-            [{"role": "user", "content": instruction}],
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-    return instruction
+    # [UNSPECIFIED] for unknown families we trust the tokenizer's default.
+    return tokenizer.apply_chat_template(
+        [{"role": "user", "content": instruction}],
+        tokenize=False,
+        add_generation_prompt=True,
+    )
 
 
 # -----------------------------------------------------------------------------
