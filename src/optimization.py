@@ -61,6 +61,71 @@ def constrained_candidate_score(result: SweepResult) -> tuple[int, float, float,
     )
 
 
+def meaningful_improvement(
+    previous: SweepResult,
+    candidate: SweepResult,
+    *,
+    min_valid_reduction_gain: float = 0.10,
+    min_score_drop_gain: float = 0.10,
+) -> bool:
+    """Return whether a candidate materially improves the current best result.
+
+    The gate intentionally ignores tiny ordering changes that can come from
+    judge noise or coefficient tie-breakers.  A follow-up cycle must either
+    make a previously invalid run valid, preserve the hard gates while adding
+    meaningful refusal-probe movement, or restore a hard safety/quality gate.
+    """
+    if bool(candidate.get("run_is_valid")) and not bool(previous.get("run_is_valid")):
+        return True
+
+    if constrained_candidate_score(candidate) <= constrained_candidate_score(previous):
+        return False
+
+    valid_reduction_gain = float(candidate.get("valid_reduction_rate", 0.0)) - float(
+        previous.get("valid_reduction_rate", 0.0)
+    )
+    score_drop_gain = float(
+        candidate.get("avg_score_drop", candidate.get("bypass_rate", 0.0))
+    ) - float(previous.get("avg_score_drop", previous.get("bypass_rate", 0.0)))
+    quality_gate_restored = (
+        float(candidate.get("bypass_quality_rate", 0.0)) >= 1.0
+        and float(previous.get("bypass_quality_rate", 0.0)) < 1.0
+    )
+    benign_gate_restored = (
+        float(candidate.get("benign_valid_rate", 0.0)) >= 1.0
+        and float(previous.get("benign_valid_rate", 0.0)) < 1.0
+    )
+
+    return (
+        valid_reduction_gain >= min_valid_reduction_gain
+        or score_drop_gain >= min_score_drop_gain
+        or quality_gate_restored
+        or benign_gate_restored
+    )
+
+
+def should_stop_search(
+    *,
+    converged: bool,
+    completed_cycles: int,
+    max_cycles: int,
+    stagnant_cycles: int,
+    max_stagnant_cycles: int,
+    elapsed_seconds: float | None = None,
+    max_seconds: float | None = None,
+) -> tuple[bool, str]:
+    """Return a deterministic stop decision for expensive model searches."""
+    if converged:
+        return True, "CONVERGED"
+    if max_seconds is not None and elapsed_seconds is not None and elapsed_seconds >= max_seconds:
+        return True, "TIME_BUDGET_EXHAUSTED"
+    if completed_cycles >= max_cycles:
+        return True, "MAX_CYCLES_REACHED"
+    if stagnant_cycles >= max_stagnant_cycles:
+        return True, "NO_MEANINGFUL_IMPROVEMENT"
+    return False, "CONTINUE"
+
+
 def build_intervention_candidates(
     *,
     direction_families: Sequence[str],

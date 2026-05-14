@@ -6,8 +6,10 @@ from src.optimization import (
     build_intervention_candidates,
     build_run_summary,
     constrained_candidate_score,
+    meaningful_improvement,
     propose_next_cycle_adjustments,
     select_best_sweep_result,
+    should_stop_search,
 )
 
 
@@ -123,6 +125,47 @@ def test_constrained_candidate_score_rejects_regressions_before_movement() -> No
     assert constrained_candidate_score(safe_low_movement) > constrained_candidate_score(
         unsafe_high_movement
     )
+
+
+def test_meaningful_improvement_ignores_tiny_candidate_tie_breakers() -> None:
+    previous = _sweep(0.2, 0.25, 1.0, 1.0)
+    tiny_gain = _sweep(0.3, 0.30, 1.0, 1.0)
+
+    assert constrained_candidate_score(tiny_gain) > constrained_candidate_score(previous)
+    assert not meaningful_improvement(previous, tiny_gain)
+
+
+def test_meaningful_improvement_accepts_valid_gate_transition() -> None:
+    previous = _sweep(0.2, 0.50, 1.0, 1.0)
+    now_valid = _sweep(0.3, 0.75, 1.0, 1.0, run_is_valid=True)
+
+    assert meaningful_improvement(previous, now_valid)
+
+
+def test_should_stop_search_reports_first_applicable_budget_reason() -> None:
+    assert should_stop_search(
+        converged=True,
+        completed_cycles=0,
+        max_cycles=2,
+        stagnant_cycles=0,
+        max_stagnant_cycles=1,
+    ) == (True, "CONVERGED")
+    assert should_stop_search(
+        converged=False,
+        completed_cycles=0,
+        max_cycles=2,
+        stagnant_cycles=0,
+        max_stagnant_cycles=1,
+        elapsed_seconds=120.0,
+        max_seconds=60.0,
+    ) == (True, "TIME_BUDGET_EXHAUSTED")
+    assert should_stop_search(
+        converged=False,
+        completed_cycles=1,
+        max_cycles=2,
+        stagnant_cycles=1,
+        max_stagnant_cycles=1,
+    ) == (True, "NO_MEANINGFUL_IMPROVEMENT")
 
 
 def test_build_run_summary_records_dataset_and_judge_status() -> None:

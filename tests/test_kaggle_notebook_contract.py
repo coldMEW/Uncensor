@@ -47,7 +47,6 @@ def test_kaggle_notebook_runs_second_layer_local_cycle_after_failure() -> None:
     source = _source()
     assert "optimization_cycles" in source
     assert "middle_layer_indices" in source
-    assert "expanded_layer_indices" in source
     assert "layer_indices=cycle_config['layer_indices']" in source
     assert "include_final_norm=cycle_config['include_final_norm']" in source
     assert "'cycle_index': 3" in source
@@ -95,6 +94,10 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     assert "SEARCH_EVAL_LIMIT = 16" in source
     assert "SEARCH_BENIGN_LIMIT = 16" in source
     assert "FULL_VERIFY_LIMIT = 100" in source
+    assert "MAX_SEARCH_SECONDS = 3600" in source
+    assert "MAX_FOLLOWUP_CYCLES = 2" in source
+    assert "MAX_NO_IMPROVEMENT_CYCLES = 1" in source
+    assert "MAX_CANDIDATES = 8" in source
     assert "search_eval_prompts = eval_prompts[:min(SEARCH_EVAL_LIMIT, len(eval_prompts))]" in source
     assert "search_benign_prompts = benign_control_prompts[:min(SEARCH_BENIGN_LIMIT, len(benign_control_prompts))]" in source
     assert "final_verify_prompts = eval_prompts[:min(FULL_VERIFY_LIMIT, len(eval_prompts))]" in source
@@ -166,16 +169,19 @@ def test_kaggle_notebook_sweeps_direction_subsets_before_expansion() -> None:
     assert "active_directions = directions[:cycle_config['direction_count']]" in source
     assert "'direction_count': 1" in source
     assert "'direction_count': 2" in source
-    assert "'direction_count': 3" in source
+    assert "direction_counts=[1, 3]" in source
 
 
-def test_kaggle_notebook_expands_when_quality_is_preserved_but_movement_is_low() -> None:
+def test_kaggle_notebook_bounds_followup_cycles_and_stops_on_stagnation() -> None:
     source = _source()
-    assert "top_ranked_layers_wide" in source
-    assert "best_layer_window_radius_4" in source
-    assert "'layer_strategy': 'top_ranked_layers_wide_no_regression_expansion'" in source
-    assert "'layer_strategy': 'best_layer_window_radius_4_no_regression_expansion'" in source
-    assert "'coefficient_grid': [0.20, 0.30, 0.40, 0.50, 0.60]" in source
+    assert "meaningful_improvement" in source
+    assert "should_stop_search" in source
+    assert "optimization_cycles = optimization_cycles[:MAX_FOLLOWUP_CYCLES]" in source
+    assert "stagnant_cycles" in source
+    assert "search_stop_reason" in source
+    assert "completed_followup_cycles" in source
+    assert "print(f'refusal_probe_{prompt_idx}: delta=" not in source
+    assert "print(f'refusal_probe_{prompt_idx}')" not in source
 
 
 def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> None:
@@ -188,6 +194,8 @@ def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> N
     assert "candidate_id" in source
     assert "rejected_candidates" in source
     assert "search_summary" in source
+    assert "candidate_grid = candidate_grid[:MAX_CANDIDATES]" in source
+    assert "candidate_search_enabled = search_stop_reason != 'TIME_BUDGET_EXHAUSTED'" in source
 
 
 def test_kaggle_notebook_records_category_metrics_without_raw_probe_logs() -> None:
