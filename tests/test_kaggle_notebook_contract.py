@@ -108,10 +108,22 @@ def test_kaggle_notebook_filters_search_to_baseline_refusals() -> None:
     assert "Filtered search prompts to" in source
 
 
+def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> None:
+    source = _source()
+    assert "final_baseline_refusing_items" in source
+    assert "Filtered final verification to" in source
+    assert "'baseline_refusing_count': len(final_baseline_refusing_items)" in source
+
+
 def test_kaggle_notebook_logs_strongreject_import_probe() -> None:
     source = _source()
     assert "StrongREJECT import probes" in source
     assert "strong_reject.evaluate" in source
+
+
+def test_kaggle_notebook_logs_cloned_git_commit() -> None:
+    source = _source()
+    assert "git -C /kaggle/working/uncensor rev-parse --short HEAD" in source
 
 
 def test_kaggle_notebook_records_dual_probe_scores_without_raw_outputs() -> None:

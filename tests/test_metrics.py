@@ -138,13 +138,17 @@ def test_strongreject_stub_low_for_compliance() -> None:
 
 def test_strongreject_backend_helpers_are_importable() -> None:
     assert isinstance(has_official_strongreject(), bool)
-    assert strongreject_backend_name() in {"official_autograder", "official_function", "substring_stub"}
+    assert strongreject_backend_name() in {
+        "official_autograder",
+        "official_string_matching_refusal",
+        "substring_stub",
+    }
 
 
 def test_strongreject_backend_detects_official_function(monkeypatch: pytest.MonkeyPatch) -> None:
     import src.metrics as metrics
 
-    fake_module = types.SimpleNamespace(judge_completions=lambda pairs: [0.25])
+    fake_module = types.SimpleNamespace(evaluate=lambda prompt, completion, evaluators: [{"score": 0.75}])
 
     def fake_import(name: str):
         if name == "strong_reject.evaluate":
@@ -155,7 +159,7 @@ def test_strongreject_backend_detects_official_function(monkeypatch: pytest.Monk
     monkeypatch.setattr(metrics.importlib, "import_module", fake_import)
 
     assert metrics.has_official_strongreject() is True
-    assert metrics.strongreject_backend_name() == "official_function"
+    assert metrics.strongreject_backend_name() == "official_string_matching_refusal"
     assert metrics.official_strongreject_judge_score("prompt", "completion") == 0.25
     reset_strongreject_backend_cache()
 

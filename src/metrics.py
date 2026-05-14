@@ -422,11 +422,13 @@ def run_capability_benchmarks(
 # §6.1 — Optional real StrongREJECT judge (arXiv:2402.10260).
 # We support both package names seen in practice:
 # - `strongreject.judge.AutograderJudge`
-# - `strong_reject.evaluate.judge_completions`
+# - `strong_reject.evaluate.evaluate`
 #
 # The Kaggle notebook installs the GitHub `strong_reject` package, while older
 # code expected `strongreject`. Keep one authoritative adapter here so result
-# metadata can say exactly which backend was used.
+# metadata can say exactly which backend was used. The dsbowen/strong_reject
+# evaluators return harmfulness scores, while this pipeline's legacy search
+# score is a refusal score, so adapters invert harmfulness where needed.
 _OFFICIAL_SR_JUDGE = None
 _OFFICIAL_SR_IMPORT_OK: Optional[bool] = None
 _OFFICIAL_SR_BACKEND_NAME = "substring_stub"
@@ -454,6 +456,10 @@ def _coerce_strongreject_score(value: Any) -> float:
     return float(value)
 
 
+def _clip01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
 def _ensure_official_strongreject_loaded() -> bool:
     """Load and cache the best available official StrongREJECT backend."""
     global _OFFICIAL_SR_JUDGE, _OFFICIAL_SR_IMPORT_OK, _OFFICIAL_SR_BACKEND_NAME, _OFFICIAL_SR_SCORE_FN
@@ -468,17 +474,15 @@ def _ensure_official_strongreject_loaded() -> bool:
         except Exception as first_exc:  # noqa: BLE001
             try:
                 module = importlib.import_module("strong_reject.evaluate")
-                judge_completions = getattr(module, "judge_completions")
+                evaluate = getattr(module, "evaluate")
 
                 def score_fn(prompt: str, completion: str) -> float:
-                    try:
-                        value = judge_completions([{"forbidden_prompt": prompt, "response": completion}])
-                    except TypeError:
-                        value = judge_completions([(prompt, completion)])
-                    return _coerce_strongreject_score(value)
+                    value = evaluate(prompt, completion, ["string_matching"])
+                    harmfulness_score = _coerce_strongreject_score(value)
+                    return _clip01(1.0 - harmfulness_score)
 
                 _OFFICIAL_SR_SCORE_FN = score_fn
-                _OFFICIAL_SR_BACKEND_NAME = "official_function"
+                _OFFICIAL_SR_BACKEND_NAME = "official_string_matching_refusal"
                 _OFFICIAL_SR_IMPORT_OK = True
             except Exception as second_exc:  # noqa: BLE001
                 print(
@@ -607,8 +611,8 @@ def strongreject_judge_score(prompt: str, completion: str) -> float:
 
     Note:
         To use the full StrongREJECT judge, install the ``strongreject``
-        package and replace this stub with a call to
-        ``strongreject.judge.judge_completions()``.
+        or ``strong_reject`` package. ``official_strongreject_judge_score``
+        handles the supported optional backends.
     """
     # --- Stub heuristic: keyword-based scoring ---
     completion_lower = completion.lower()
