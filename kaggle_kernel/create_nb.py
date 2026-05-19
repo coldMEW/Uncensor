@@ -4,7 +4,7 @@ nb = {
     "nbformat": 4,
     "nbformat_minor": 5,
     "metadata": {
-        "kaggle": {"accelerator": "GPU", "gpu": True, "language": "python"},
+        "kaggle": {"accelerator": "GPU T4 x2", "enable_gpu": True, "language": "python"},
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}
     },
     "cells": [

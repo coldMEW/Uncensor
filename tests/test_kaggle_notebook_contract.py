@@ -91,13 +91,14 @@ def test_kaggle_notebook_supports_multiple_hf_secret_names_without_literal_token
 
 def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     source = _source()
-    assert "SEARCH_EVAL_LIMIT = 16" in source
-    assert "SEARCH_BENIGN_LIMIT = 16" in source
-    assert "FULL_VERIFY_LIMIT = 100" in source
-    assert "MAX_SEARCH_SECONDS = 3600" in source
-    assert "MAX_FOLLOWUP_CYCLES = 2" in source
+    assert "SEARCH_EVAL_LIMIT = 8" in source
+    assert "SEARCH_BENIGN_LIMIT = 8" in source
+    assert "FULL_VERIFY_LIMIT = 24" in source
+    assert "MAX_SEARCH_SECONDS = 1800" in source
+    assert "MAX_FOLLOWUP_CYCLES = 1" in source
     assert "MAX_NO_IMPROVEMENT_CYCLES = 1" in source
-    assert "MAX_CANDIDATES = 8" in source
+    assert "MAX_CANDIDATES = 4" in source
+    assert "MAX_GENERATION_EVALUATIONS = 96" in source
     assert "search_eval_prompts = eval_prompts[:min(SEARCH_EVAL_LIMIT, len(eval_prompts))]" in source
     assert "search_benign_prompts = benign_control_prompts[:min(SEARCH_BENIGN_LIMIT, len(benign_control_prompts))]" in source
     assert "final_verify_prompts = eval_prompts[:min(FULL_VERIFY_LIMIT, len(eval_prompts))]" in source
@@ -148,7 +149,7 @@ def test_kaggle_notebook_records_benchmark_matrix_and_dataset_scale_status() -> 
 def test_kaggle_notebook_computes_benign_kl_for_candidate_ranking() -> None:
     source = _source()
     assert "from src.metrics import kl_divergence_from_logits" in source
-    assert "KL_PROMPT_LIMIT = 4" in source
+    assert "KL_PROMPT_LIMIT = 2" in source
     assert "def last_token_logits(text):" in source
     assert "'benign_kl': float(benign_kl)" in source
     assert "constrained_candidate_score" in source
@@ -169,33 +170,37 @@ def test_kaggle_notebook_sweeps_direction_subsets_before_expansion() -> None:
     assert "active_directions = directions[:cycle_config['direction_count']]" in source
     assert "'direction_count': 1" in source
     assert "'direction_count': 2" in source
-    assert "direction_counts=[1, 3]" in source
+    assert "default_direction_count=3" in Path("src/methods.py").read_text(encoding="utf-8")
 
 
 def test_kaggle_notebook_bounds_followup_cycles_and_stops_on_stagnation() -> None:
     source = _source()
     assert "meaningful_improvement" in source
     assert "should_stop_search" in source
+    assert "should_stop_evaluation_budget" in source
     assert "optimization_cycles = optimization_cycles[:MAX_FOLLOWUP_CYCLES]" in source
     assert "stagnant_cycles" in source
     assert "search_stop_reason" in source
     assert "completed_followup_cycles" in source
+    assert "search_generation_count" in source
+    assert "def search_budget_exhausted():" in source
     assert "print(f'refusal_probe_{prompt_idx}: delta=" not in source
     assert "print(f'refusal_probe_{prompt_idx}')" not in source
 
 
 def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> None:
     source = _source()
-    assert "build_intervention_candidates" in source
+    assert "build_method_search_space" in source
+    assert "kaggle_supported_methods" in source
     assert "constrained_candidate_score" in source
     assert "build_run_summary" in source
-    assert "direction_families=['svd_primary', 'svd_multi']" in source
-    assert "intervention_types=['hook_ablation']" in source
+    assert "robust_method_specs = kaggle_supported_methods()" in source
+    assert "Robust Kaggle method registry" in source
     assert "candidate_id" in source
     assert "rejected_candidates" in source
     assert "search_summary" in source
     assert "candidate_grid = candidate_grid[:MAX_CANDIDATES]" in source
-    assert "candidate_search_enabled = search_stop_reason != 'TIME_BUDGET_EXHAUSTED'" in source
+    assert "candidate_search_enabled = search_stop_reason in ('CONTINUE', 'MAX_CYCLES_REACHED')" in source
 
 
 def test_kaggle_notebook_records_category_metrics_without_raw_probe_logs() -> None:

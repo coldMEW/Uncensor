@@ -9,6 +9,7 @@ from src.optimization import (
     meaningful_improvement,
     propose_next_cycle_adjustments,
     select_best_sweep_result,
+    should_stop_evaluation_budget,
     should_stop_search,
 )
 
@@ -166,6 +167,27 @@ def test_should_stop_search_reports_first_applicable_budget_reason() -> None:
         stagnant_cycles=1,
         max_stagnant_cycles=1,
     ) == (True, "NO_MEANINGFUL_IMPROVEMENT")
+
+
+def test_should_stop_evaluation_budget_bounds_expensive_generation_calls() -> None:
+    assert should_stop_evaluation_budget(
+        completed_evaluations=95,
+        max_evaluations=96,
+        elapsed_seconds=120.0,
+        max_seconds=1_800.0,
+    ) == (False, "CONTINUE")
+    assert should_stop_evaluation_budget(
+        completed_evaluations=96,
+        max_evaluations=96,
+        elapsed_seconds=120.0,
+        max_seconds=1_800.0,
+    ) == (True, "EVALUATION_BUDGET_EXHAUSTED")
+    assert should_stop_evaluation_budget(
+        completed_evaluations=1,
+        max_evaluations=96,
+        elapsed_seconds=1_800.0,
+        max_seconds=1_800.0,
+    ) == (True, "TIME_BUDGET_EXHAUSTED")
 
 
 def test_build_run_summary_records_dataset_and_judge_status() -> None:

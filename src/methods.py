@@ -9,7 +9,7 @@ reported transparently instead of silently falling back to all-layer edits.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Any, Dict, Mapping, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -71,3 +71,38 @@ METHOD_REGISTRY: Dict[str, MethodSpec] = {
 
 def kaggle_supported_methods() -> Tuple[MethodSpec, ...]:
     return tuple(spec for spec in METHOD_REGISTRY.values() if spec.supported_on_kaggle)
+
+
+def build_method_search_space(
+    *,
+    layer_windows: Mapping[str, Sequence[int]],
+    coefficients: Sequence[float],
+    methods: Sequence[MethodSpec] | None = None,
+) -> Tuple[Dict[str, Any], ...]:
+    """Build a deterministic candidate grid from registered methods.
+
+    The method registry is the single source of truth for Kaggle robust mode.
+    Unsupported methods stay visible in ``METHOD_REGISTRY`` for export/offline
+    use, but they are intentionally excluded from this reversible search grid.
+    """
+    active_methods = tuple(methods or kaggle_supported_methods())
+    candidates = []
+    candidate_index = 0
+    for spec in active_methods:
+        for layer_window_name, layer_indices in layer_windows.items():
+            for coefficient in coefficients:
+                candidate_index += 1
+                candidates.append(
+                    {
+                        "candidate_id": f"m{candidate_index:04d}",
+                        "method_name": spec.name,
+                        "direction_family": spec.direction_family,
+                        "direction_count": int(spec.default_direction_count),
+                        "layer_window_name": str(layer_window_name),
+                        "layer_indices": [int(idx) for idx in layer_indices],
+                        "coefficient": float(coefficient),
+                        "intervention_type": spec.intervention_type,
+                        "include_final_norm": bool(spec.include_final_norm_by_default),
+                    }
+                )
+    return tuple(candidates)

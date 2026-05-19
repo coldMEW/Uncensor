@@ -126,6 +126,26 @@ def should_stop_search(
     return False, "CONTINUE"
 
 
+def should_stop_evaluation_budget(
+    *,
+    completed_evaluations: int,
+    max_evaluations: int,
+    elapsed_seconds: float | None = None,
+    max_seconds: float | None = None,
+) -> tuple[bool, str]:
+    """Return a stop decision for expensive generation/evaluation calls.
+
+    Cycle-level stop checks are not enough when each prompt generation is slow.
+    This helper gives notebooks and CLIs a deterministic budget gate that can be
+    checked before each model call.
+    """
+    if max_seconds is not None and elapsed_seconds is not None and elapsed_seconds >= max_seconds:
+        return True, "TIME_BUDGET_EXHAUSTED"
+    if completed_evaluations >= max_evaluations:
+        return True, "EVALUATION_BUDGET_EXHAUSTED"
+    return False, "CONTINUE"
+
+
 def build_intervention_candidates(
     *,
     direction_families: Sequence[str],
