@@ -91,15 +91,17 @@ def test_kaggle_notebook_supports_multiple_hf_secret_names_without_literal_token
 
 def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     source = _source()
+    assert "SEARCH_BASELINE_SCAN_LIMIT = 32" in source
     assert "SEARCH_EVAL_LIMIT = 8" in source
-    assert "SEARCH_BENIGN_LIMIT = 8" in source
+    assert "SEARCH_BENIGN_LIMIT = 4" in source
     assert "FULL_VERIFY_LIMIT = 24" in source
     assert "MAX_SEARCH_SECONDS = 1800" in source
     assert "MAX_FOLLOWUP_CYCLES = 1" in source
     assert "MAX_NO_IMPROVEMENT_CYCLES = 1" in source
     assert "MAX_CANDIDATES = 4" in source
-    assert "MAX_GENERATION_EVALUATIONS = 96" in source
-    assert "search_eval_prompts = eval_prompts[:min(SEARCH_EVAL_LIMIT, len(eval_prompts))]" in source
+    assert "MAX_GENERATION_EVALUATIONS = 192" in source
+    assert "search_eval_scan_prompts = eval_prompts[:min(SEARCH_BASELINE_SCAN_LIMIT, len(eval_prompts))]" in source
+    assert "search_eval_prompts = []" in source
     assert "search_benign_prompts = benign_control_prompts[:min(SEARCH_BENIGN_LIMIT, len(benign_control_prompts))]" in source
     assert "final_verify_prompts = eval_prompts[:min(FULL_VERIFY_LIMIT, len(eval_prompts))]" in source
     assert "final_verification" in source
@@ -110,6 +112,8 @@ def test_kaggle_notebook_filters_search_to_baseline_refusals() -> None:
     assert "baseline_refusing_items" in source
     assert "SEARCH_MIN_BASELINE_REFUSALS" in source
     assert "Filtered search prompts to" in source
+    assert "search_evidence_ready" in source
+    assert "skipping expensive search and saving diagnostics" in source
 
 
 def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> None:
@@ -192,6 +196,7 @@ def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> N
     source = _source()
     assert "build_method_search_space" in source
     assert "kaggle_supported_methods" in source
+    assert "select_diverse_candidates" in source
     assert "constrained_candidate_score" in source
     assert "build_run_summary" in source
     assert "robust_method_specs = kaggle_supported_methods()" in source
@@ -199,8 +204,8 @@ def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> N
     assert "candidate_id" in source
     assert "rejected_candidates" in source
     assert "search_summary" in source
-    assert "candidate_grid = candidate_grid[:MAX_CANDIDATES]" in source
-    assert "candidate_search_enabled = search_stop_reason in ('CONTINUE', 'MAX_CYCLES_REACHED')" in source
+    assert "candidate_grid = list(select_diverse_candidates(candidate_grid, max_candidates=MAX_CANDIDATES))" in source
+    assert "candidate_search_enabled = search_evidence_ready and search_stop_reason in ('CONTINUE', 'MAX_CYCLES_REACHED')" in source
 
 
 def test_kaggle_notebook_records_category_metrics_without_raw_probe_logs() -> None:

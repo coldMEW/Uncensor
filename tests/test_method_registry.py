@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from src.methods import METHOD_REGISTRY, MethodSpec, build_method_search_space, kaggle_supported_methods
+from src.methods import (
+    METHOD_REGISTRY,
+    MethodSpec,
+    build_method_search_space,
+    kaggle_supported_methods,
+    select_diverse_candidates,
+)
 
 
 def test_method_registry_includes_requested_abliteration_research_methods() -> None:
@@ -42,3 +48,19 @@ def test_method_search_space_builds_reversible_registered_candidates() -> None:
         "layer_weighted",
     }
     assert all(candidate["intervention_type"] != "weight_orthogonalization" for candidate in candidates)
+
+
+def test_select_diverse_candidates_round_robins_methods_before_truncating() -> None:
+    candidates = build_method_search_space(
+        layer_windows={"a": [1, 2], "b": [3, 4]},
+        coefficients=[0.1, 0.2],
+    )
+
+    selected = select_diverse_candidates(candidates, max_candidates=4)
+
+    assert [candidate["method_name"] for candidate in selected] == [
+        "basic",
+        "svd_multi",
+        "cosmic_ranked",
+        "layer_weighted",
+    ]

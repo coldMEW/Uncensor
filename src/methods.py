@@ -9,7 +9,7 @@ reported transparently instead of silently falling back to all-layer edits.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -106,3 +106,45 @@ def build_method_search_space(
                     }
                 )
     return tuple(candidates)
+
+
+def select_diverse_candidates(
+    candidates: Iterable[Mapping[str, Any]],
+    *,
+    max_candidates: int,
+) -> Tuple[Dict[str, Any], ...]:
+    """Select a bounded candidate set without collapsing to one method.
+
+    The raw grid is deterministic but grouped by method, window, and
+    coefficient.  A naive ``grid[:N]`` can therefore spend the whole Kaggle
+    budget on near-duplicate baseline candidates.  This selector does a stable
+    round-robin over method names so robust mode exercises each registered
+    strategy before repeating any one strategy.
+    """
+    if max_candidates <= 0:
+        return tuple()
+
+    grouped: Dict[str, list[Dict[str, Any]]] = {}
+    method_order: list[str] = []
+    for candidate in candidates:
+        item = dict(candidate)
+        method_name = str(item.get("method_name", "unknown"))
+        if method_name not in grouped:
+            grouped[method_name] = []
+            method_order.append(method_name)
+        grouped[method_name].append(item)
+
+    selected: list[Dict[str, Any]] = []
+    while len(selected) < max_candidates:
+        added_this_round = False
+        for method_name in method_order:
+            bucket = grouped[method_name]
+            if not bucket:
+                continue
+            selected.append(bucket.pop(0))
+            added_this_round = True
+            if len(selected) >= max_candidates:
+                break
+        if not added_this_round:
+            break
+    return tuple(selected)
