@@ -140,6 +140,8 @@ def test_kaggle_notebook_logs_strongreject_import_probe() -> None:
 
 def test_kaggle_notebook_logs_cloned_git_commit() -> None:
     source = _source()
+    assert "git -C /kaggle/working/uncensor fetch origin main --depth 1" in source
+    assert "git -C /kaggle/working/uncensor checkout --detach FETCH_HEAD" in source
     assert "git -C /kaggle/working/uncensor rev-parse --short HEAD" in source
 
 
