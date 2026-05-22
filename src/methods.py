@@ -112,6 +112,9 @@ def select_diverse_candidates(
     candidates: Iterable[Mapping[str, Any]],
     *,
     max_candidates: int,
+    preferred_layer_window_names: Sequence[str] = (),
+    preferred_coefficients: Sequence[float] = (),
+    preferred_direction_counts: Sequence[int] = (),
 ) -> Tuple[Dict[str, Any], ...]:
     """Select a bounded candidate set without collapsing to one method.
 
@@ -119,10 +122,37 @@ def select_diverse_candidates(
     coefficient.  A naive ``grid[:N]`` can therefore spend the whole Kaggle
     budget on near-duplicate baseline candidates.  This selector does a stable
     round-robin over method names so robust mode exercises each registered
-    strategy before repeating any one strategy.
+    strategy before repeating any one strategy.  Optional preferences reorder
+    each method bucket without changing method diversity; this lets a run feed
+    back observed useful layer windows or coefficient ranges into candidate
+    triage.
     """
     if max_candidates <= 0:
         return tuple()
+
+    preferred_windows = tuple(str(name) for name in preferred_layer_window_names)
+    preferred_coeffs = tuple(float(value) for value in preferred_coefficients)
+    preferred_counts = tuple(int(value) for value in preferred_direction_counts)
+
+    def preference_rank(candidate: Mapping[str, Any]) -> tuple[float, float, float]:
+        layer_name = str(candidate.get("layer_window_name", ""))
+        direction_count = int(candidate.get("direction_count", 0))
+        coefficient = float(candidate.get("coefficient", 0.0))
+        layer_rank = (
+            preferred_windows.index(layer_name)
+            if layer_name in preferred_windows
+            else len(preferred_windows)
+        )
+        count_rank = (
+            preferred_counts.index(direction_count)
+            if direction_count in preferred_counts
+            else len(preferred_counts)
+        )
+        if preferred_coeffs:
+            coeff_rank = min(abs(coefficient - target) for target in preferred_coeffs)
+        else:
+            coeff_rank = 0.0
+        return (float(layer_rank), float(count_rank), float(coeff_rank))
 
     grouped: Dict[str, list[Dict[str, Any]]] = {}
     method_order: list[str] = []
@@ -133,6 +163,10 @@ def select_diverse_candidates(
             grouped[method_name] = []
             method_order.append(method_name)
         grouped[method_name].append(item)
+
+    if preferred_windows or preferred_coeffs or preferred_counts:
+        for bucket in grouped.values():
+            bucket.sort(key=preference_rank)
 
     selected: list[Dict[str, Any]] = []
     while len(selected) < max_candidates:

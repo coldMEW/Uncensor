@@ -64,3 +64,26 @@ def test_select_diverse_candidates_round_robins_methods_before_truncating() -> N
         "cosmic_ranked",
         "layer_weighted",
     ]
+
+
+def test_select_diverse_candidates_honors_preferences_within_each_method() -> None:
+    candidates = build_method_search_space(
+        layer_windows={"weak": [1, 2], "observed": [3, 4]},
+        coefficients=[0.1, 0.2],
+    )
+
+    selected = select_diverse_candidates(
+        candidates,
+        max_candidates=4,
+        preferred_layer_window_names=("observed",),
+        preferred_coefficients=(0.2,),
+    )
+
+    assert [candidate["method_name"] for candidate in selected] == [
+        "basic",
+        "svd_multi",
+        "cosmic_ranked",
+        "layer_weighted",
+    ]
+    assert {candidate["layer_window_name"] for candidate in selected} == {"observed"}
+    assert {candidate["coefficient"] for candidate in selected} == {0.2}

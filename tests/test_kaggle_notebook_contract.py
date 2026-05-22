@@ -96,6 +96,8 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     assert "SEARCH_BENIGN_LIMIT = 4" in source
     assert "CANDIDATE_TRIAGE_REFUSAL_LIMIT = 4" in source
     assert "CANDIDATE_TRIAGE_BENIGN_LIMIT = 2" in source
+    assert "PARTIAL_VERIFY_LIMIT = 8" in source
+    assert "PARTIAL_VERIFY_MIN_VALID_REDUCTION = 0.25" in source
     assert "FULL_VERIFY_LIMIT = 24" in source
     assert "MAX_SEARCH_SECONDS = 2700" in source
     assert "MAX_FOLLOWUP_CYCLES = 1" in source
@@ -106,6 +108,7 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     assert "search_eval_prompts = []" in source
     assert "search_benign_prompts = benign_control_prompts[:min(SEARCH_BENIGN_LIMIT, len(benign_control_prompts))]" in source
     assert "final_verify_prompts = eval_prompts[:min(FULL_VERIFY_LIMIT, len(eval_prompts))]" in source
+    assert "final_verify_prompts = final_verify_prompts[:min(PARTIAL_VERIFY_LIMIT, len(final_verify_prompts))]" in source
     assert "candidate_eval_prompts = search_eval_prompts[:min(CANDIDATE_TRIAGE_REFUSAL_LIMIT, len(search_eval_prompts))]" in source
     assert "candidate_benign_prompts = search_benign_prompts[:min(CANDIDATE_TRIAGE_BENIGN_LIMIT, len(search_benign_prompts))]" in source
     assert "final_verification" in source
@@ -212,8 +215,18 @@ def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> N
     assert "candidate_id" in source
     assert "rejected_candidates" in source
     assert "search_summary" in source
-    assert "candidate_grid = list(select_diverse_candidates(candidate_grid, max_candidates=MAX_CANDIDATES))" in source
+    assert "preferred_layer_window_names=('top_ranked_wide', 'best_radius_4', 'best_radius_2')" in source
+    assert "preferred_coefficients=(float(best_result.get('coefficient', 0.20)), 0.20, 0.35)" in source
     assert "candidate_search_enabled = search_evidence_ready and search_stop_reason in ('CONTINUE', 'MAX_CYCLES_REACHED')" in source
+
+
+def test_kaggle_notebook_runs_bounded_partial_final_verification() -> None:
+    source = _source()
+    assert "partial_final_verification = bool(" in source
+    assert "PARTIAL_VERIFY_MIN_VALID_REDUCTION" in source
+    assert "final_verification_mode = 'valid_run'" in source
+    assert "Running bounded partial final verification" in source
+    assert "'mode': final_verification_mode" in source
 
 
 def test_kaggle_notebook_records_category_metrics_without_raw_probe_logs() -> None:
