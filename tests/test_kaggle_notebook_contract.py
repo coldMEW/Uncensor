@@ -94,8 +94,10 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     assert "SEARCH_BASELINE_SCAN_LIMIT = 32" in source
     assert "SEARCH_EVAL_LIMIT = 8" in source
     assert "SEARCH_BENIGN_LIMIT = 4" in source
+    assert "CANDIDATE_TRIAGE_REFUSAL_LIMIT = 4" in source
+    assert "CANDIDATE_TRIAGE_BENIGN_LIMIT = 2" in source
     assert "FULL_VERIFY_LIMIT = 24" in source
-    assert "MAX_SEARCH_SECONDS = 1800" in source
+    assert "MAX_SEARCH_SECONDS = 2700" in source
     assert "MAX_FOLLOWUP_CYCLES = 1" in source
     assert "MAX_NO_IMPROVEMENT_CYCLES = 1" in source
     assert "MAX_CANDIDATES = 4" in source
@@ -104,6 +106,8 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     assert "search_eval_prompts = []" in source
     assert "search_benign_prompts = benign_control_prompts[:min(SEARCH_BENIGN_LIMIT, len(benign_control_prompts))]" in source
     assert "final_verify_prompts = eval_prompts[:min(FULL_VERIFY_LIMIT, len(eval_prompts))]" in source
+    assert "candidate_eval_prompts = search_eval_prompts[:min(CANDIDATE_TRIAGE_REFUSAL_LIMIT, len(search_eval_prompts))]" in source
+    assert "candidate_benign_prompts = search_benign_prompts[:min(CANDIDATE_TRIAGE_BENIGN_LIMIT, len(search_benign_prompts))]" in source
     assert "final_verification" in source
 
 
@@ -112,6 +116,8 @@ def test_kaggle_notebook_filters_search_to_baseline_refusals() -> None:
     assert "baseline_refusing_items" in source
     assert "SEARCH_MIN_BASELINE_REFUSALS" in source
     assert "Filtered search prompts to" in source
+    assert "Found {SEARCH_EVAL_LIMIT} baseline-refusing probes; stopping baseline scan early" in source
+    assert "scanned_prompt_count = len(baseline_scores)" in source
     assert "search_evidence_ready" in source
     assert "skipping expensive search and saving diagnostics" in source
 
@@ -166,14 +172,16 @@ def test_kaggle_notebook_uses_ranked_layer_window_search() -> None:
     assert "best_layer_idx" in source
     assert "best_layer_window_radius_1" in source
     assert "top_ranked_layers" in source
+    assert "initial_layer_indices = top_ranked_layers" in source
 
 
 def test_kaggle_notebook_sweeps_direction_subsets_before_expansion() -> None:
     source = _source()
     assert "direction_count" in source
     assert "active_directions = directions[:cycle_config['direction_count']]" in source
-    assert "'direction_count': 1" in source
+    assert "initial_direction_count = 1" in source
     assert "'direction_count': 2" in source
+    assert "'layer_strategy': 'top_ranked_layers_wide_direction_2'" in source
     assert "default_direction_count=3" in Path("src/methods.py").read_text(encoding="utf-8")
 
 
