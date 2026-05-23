@@ -146,7 +146,12 @@ def test_kaggle_notebook_reports_partial_plateau_without_claiming_success() -> N
     source = _source()
     assert "partial_signal = bool(" in source
     assert "PARTIAL_SIGNAL_PLATEAU" in source
-    assert "if valid_reduction_rate >= PARTIAL_SIGNAL_THRESHOLD:" in source
+    assert "PARTIAL_SIGNAL_HELDOUT_REGRESSION" in source
+    assert "search_best_valid_reduction_rate = valid_reduction_rate" in source
+    assert "best_observed_valid_reduction_rate = max(valid_reduction_rate, search_best_valid_reduction_rate)" in source
+    assert "heldout_regression = bool(" in source
+    assert "search_summary['heldout_regression'] = bool(heldout_regression)" in source
+    assert "if best_observed_valid_reduction_rate >= PARTIAL_SIGNAL_THRESHOLD:" in source
     assert "status_reasons.append('INSUFFICIENT_VALID_REDUCTION')" in source
 
 
