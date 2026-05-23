@@ -117,9 +117,12 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
 def test_kaggle_notebook_filters_search_to_baseline_refusals() -> None:
     source = _source()
     assert "baseline_refusing_items" in source
+    assert "SEARCH_BASELINE_REFUSAL_TARGET = SEARCH_EVAL_LIMIT + PARTIAL_VERIFY_LIMIT" in source
+    assert "search_baseline_refusing_items = baseline_refusing_items[:SEARCH_EVAL_LIMIT]" in source
+    assert "heldout_baseline_refusing_items = baseline_refusing_items[SEARCH_EVAL_LIMIT:SEARCH_BASELINE_REFUSAL_TARGET]" in source
     assert "SEARCH_MIN_BASELINE_REFUSALS" in source
     assert "Filtered search prompts to" in source
-    assert "Found {SEARCH_EVAL_LIMIT} baseline-refusing probes; stopping baseline scan early" in source
+    assert "Found {SEARCH_BASELINE_REFUSAL_TARGET} baseline-refusing probes; stopping baseline scan early" in source
     assert "scanned_prompt_count = len(baseline_scores)" in source
     assert "search_evidence_ready" in source
     assert "skipping expensive search and saving diagnostics" in source
@@ -128,12 +131,23 @@ def test_kaggle_notebook_filters_search_to_baseline_refusals() -> None:
 def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> None:
     source = _source()
     assert "final_baseline_refusing_items" in source
+    assert "seed_final_baseline_refusals = heldout_baseline_refusing_items[:final_verification_target_refusal_count]" in source
+    assert "final_scanned_prompt_set = set(item[0] for item in seed_final_baseline_refusals)" in source
+    assert "if prompt in final_scanned_prompt_set:" in source
     assert "Filtered final verification to" in source
     assert "'baseline_refusing_count': len(final_baseline_refusing_items)" in source
     assert "Keeping all final verification prompts" not in source
     assert "Skipping final intervention verification" in source
     assert "final_verification_inconclusive" in source
     assert "'baseline_scan_count': int(final_baseline_scan_count)" in source
+
+
+def test_kaggle_notebook_reports_partial_plateau_without_claiming_success() -> None:
+    source = _source()
+    assert "partial_signal = bool(" in source
+    assert "PARTIAL_SIGNAL_PLATEAU" in source
+    assert "if valid_reduction_rate >= PARTIAL_SIGNAL_THRESHOLD:" in source
+    assert "status_reasons.append('INSUFFICIENT_VALID_REDUCTION')" in source
 
 
 def test_kaggle_notebook_logs_strongreject_import_probe() -> None:
