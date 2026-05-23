@@ -108,7 +108,7 @@ def test_kaggle_notebook_uses_search_subset_before_full_verification() -> None:
     assert "search_eval_prompts = []" in source
     assert "search_benign_prompts = benign_control_prompts[:min(SEARCH_BENIGN_LIMIT, len(benign_control_prompts))]" in source
     assert "final_verify_prompts = eval_prompts[:min(FULL_VERIFY_LIMIT, len(eval_prompts))]" in source
-    assert "final_verify_prompts = final_verify_prompts[:min(PARTIAL_VERIFY_LIMIT, len(final_verify_prompts))]" in source
+    assert "final_verification_target_refusal_count = PARTIAL_VERIFY_LIMIT" in source
     assert "candidate_eval_prompts = search_eval_prompts[:min(CANDIDATE_TRIAGE_REFUSAL_LIMIT, len(search_eval_prompts))]" in source
     assert "candidate_benign_prompts = search_benign_prompts[:min(CANDIDATE_TRIAGE_BENIGN_LIMIT, len(search_benign_prompts))]" in source
     assert "final_verification" in source
@@ -130,6 +130,10 @@ def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> No
     assert "final_baseline_refusing_items" in source
     assert "Filtered final verification to" in source
     assert "'baseline_refusing_count': len(final_baseline_refusing_items)" in source
+    assert "Keeping all final verification prompts" not in source
+    assert "Skipping final intervention verification" in source
+    assert "final_verification_inconclusive" in source
+    assert "'baseline_scan_count': int(final_baseline_scan_count)" in source
 
 
 def test_kaggle_notebook_logs_strongreject_import_probe() -> None:
