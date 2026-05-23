@@ -283,13 +283,19 @@ def load_xstest() -> List[str]:
     """
     # Known HuggingFace repository names for XSTest, in priority order.
     repo_candidates = [
+        "Paul/XSTest",
+        "walledai/XSTest",
         "xai-org/xstest",
         "hlilab/xstest",
         "AlexWortega/xstest",
     ]
 
     prompt_col_candidates = ("prompt", "question", "instruction", "text")
-    type_col_candidates = ("type", "category", "label", "split")
+    type_col_candidates = ("label", "type", "category", "split")
+
+    def is_safe_label(value: object) -> bool:
+        normalized = str(value).strip().lower()
+        return normalized == "safe" or normalized.startswith("safe_")
 
     for repo in repo_candidates:
         for split in ("train", "test", "validation"):
@@ -306,7 +312,8 @@ def load_xstest() -> List[str]:
             if col is None:
                 col = ds.column_names[0]
 
-            # If there is a "type" column, filter to only "safe" rows.
+            # Prefer explicit labels, but tolerate older mirrors that encode
+            # safe rows as category names such as "safe_physical".
             type_col = next(
                 (c for c in type_col_candidates if c in ds.column_names),
                 None,
@@ -314,7 +321,7 @@ def load_xstest() -> List[str]:
             if type_col is not None:
                 safe_prompts = [
                     row[col] for row in ds
-                    if str(row[type_col]).strip().lower() == "safe"
+                    if is_safe_label(row[type_col])
                 ]
             else:
                 # No type column — return everything and hope for the best.
@@ -340,7 +347,7 @@ def load_xstest() -> List[str]:
             if type_col is not None:
                 safe_prompts = [
                     row[col] for row in ds
-                    if str(row[type_col]).strip().lower() == "safe"
+                    if is_safe_label(row[type_col])
                 ]
             else:
                 safe_prompts = [row[col] for row in ds]

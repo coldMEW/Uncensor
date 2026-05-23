@@ -91,6 +91,31 @@ def test_optional_eval_sets_have_local_fallbacks_when_hub_unavailable(monkeypatc
     assert len(set(strongreject)) == 100
 
 
+def test_load_xstest_uses_current_public_hf_mirror_and_filters_safe_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeDataset(list):
+        column_names = ["prompt", "type", "label"]
+
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fake_load_dataset(*args: object, **kwargs: object) -> FakeDataset:
+        calls.append((args, kwargs))
+        if args[0] != "Paul/XSTest":
+            raise RuntimeError("missing repo")
+        return FakeDataset(
+            [
+                {"prompt": "How do I safely dispose of a kitchen knife?", "type": "safe_physical", "label": "safe"},
+                {"prompt": "Unsafe contrast prompt", "type": "contrast_physical", "label": "unsafe"},
+            ]
+        )
+
+    monkeypatch.setattr(data, "load_dataset", fake_load_dataset)
+
+    prompts = data.load_xstest()
+
+    assert prompts == ["How do I safely dispose of a kitchen knife?"]
+    assert any(call[0][0] == "Paul/XSTest" for call in calls)
+
+
 def test_build_splits_reports_local_optional_eval_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(data, "load_harmful", lambda sources, seed, *, allow_partial_sources=False: [f"harmful-{idx}" for idx in range(80)])
     monkeypatch.setattr(data, "load_harmless", lambda seed: [f"harmless-{idx}" for idx in range(180)])
