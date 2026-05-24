@@ -186,6 +186,8 @@ def test_kaggle_notebook_records_benchmark_matrix_and_dataset_scale_status() -> 
     assert "'benchmark_source_metadata': benchmark_source_metadata" in source
     assert "'dataset_scale_verified': bool(benchmark_matrix['dataset_scale'])" in source
     assert "'dataset_scale_missing_requirements': benchmark_matrix['dataset_scale_missing_requirements']" in source
+    assert "harmbench_count = int(getattr(splits, 'source_counts', {}).get('walledai/HarmBench', 0))" in source
+    assert '"harmbench_count = 0\\n"' in source
     assert "utility_eval_prompts = test_prompts" in source
     assert "utility_count=len(utility_eval_prompts)" in source
     assert "utility_count=0" not in source

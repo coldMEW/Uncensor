@@ -327,7 +327,7 @@ nb = {
                 "    strongreject_count = len(splits.strongreject_eval or [])\n",
                 "    wildjailbreak_count = len(splits.wildjailbreak_eval or [])\n",
                 "    jailbreakbench_count = len(splits.bypass_eval)\n",
-                "    harmbench_count = 0\n",
+                "    harmbench_count = int(getattr(splits, 'source_counts', {}).get('walledai/HarmBench', 0))\n",
                 "    harmful_eval = list(splits.bypass_eval)\n",
                 "    if splits.strongreject_eval:\n",
                 "        harmful_eval.extend(splits.strongreject_eval)\n",

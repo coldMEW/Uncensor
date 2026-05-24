@@ -23,6 +23,29 @@ def test_load_harmful_can_skip_failed_sources_when_partial_loading_enabled(monke
     assert sorted(prompts) == ["open prompt 1", "open prompt 2"]
 
 
+def test_load_harmful_with_counts_records_per_source_availability(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken_loader() -> list[str]:
+        raise RuntimeError("gated")
+
+    monkeypatch.setattr(
+        data,
+        "HARMFUL_LOADERS",
+        {
+            "gated/source": broken_loader,
+            "open/source": lambda: ["open prompt 1", "open prompt 2", "open prompt 1"],
+        },
+    )
+
+    prompts, source_counts = data.load_harmful_with_counts(
+        ["gated/source", "open/source"],
+        seed=0,
+        allow_partial_sources=True,
+    )
+
+    assert sorted(prompts) == ["open prompt 1", "open prompt 2"]
+    assert source_counts == {"gated/source": 0, "open/source": 2}
+
+
 def test_load_harmful_still_raises_when_every_partial_source_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         data,
@@ -35,11 +58,14 @@ def test_load_harmful_still_raises_when_every_partial_source_fails(monkeypatch: 
 
 
 def test_build_splits_passes_partial_loading_to_harmful_sources(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_load_harmful(sources: list[str], seed: int, *, allow_partial_sources: bool = False) -> list[str]:
-        assert allow_partial_sources is True
-        return [f"harmful-{idx}" for idx in range(12)]
-
-    monkeypatch.setattr(data, "load_harmful", fake_load_harmful)
+    monkeypatch.setattr(
+        data,
+        "HARMFUL_LOADERS",
+        {
+            "gated/source": lambda: (_ for _ in ()).throw(RuntimeError("gated")),
+            "open/source": lambda: [f"harmful-{idx}" for idx in range(12)],
+        },
+    )
     monkeypatch.setattr(data, "load_harmless", lambda seed: [f"harmless-{idx}" for idx in range(20)])
     monkeypatch.setattr(data, "load_jailbreakbench", lambda n: [f"eval-{idx}" for idx in range(n)])
 
@@ -55,10 +81,11 @@ def test_build_splits_passes_partial_loading_to_harmful_sources(monkeypatch: pyt
 
     assert len(splits.harmful_train) == 5
     assert len(splits.induce_eval) == 4
+    assert splits.source_counts == {"gated/source": 0, "open/source": 12}
 
 
 def test_build_splits_can_downshift_train_size_for_partial_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(data, "load_harmful", lambda sources, seed, *, allow_partial_sources=False: [f"harmful-{idx}" for idx in range(100)])
+    monkeypatch.setattr(data, "HARMFUL_LOADERS", {"open/source": lambda: [f"harmful-{idx}" for idx in range(100)]})
     monkeypatch.setattr(data, "load_harmless", lambda seed: [f"harmless-{idx}" for idx in range(300)])
     monkeypatch.setattr(data, "load_jailbreakbench", lambda n: [f"eval-{idx}" for idx in range(n)])
 
@@ -117,7 +144,7 @@ def test_load_xstest_uses_current_public_hf_mirror_and_filters_safe_label(monkey
 
 
 def test_build_splits_reports_local_optional_eval_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(data, "load_harmful", lambda sources, seed, *, allow_partial_sources=False: [f"harmful-{idx}" for idx in range(80)])
+    monkeypatch.setattr(data, "HARMFUL_LOADERS", {"open/source": lambda: [f"harmful-{idx}" for idx in range(80)]})
     monkeypatch.setattr(data, "load_harmless", lambda seed: [f"harmless-{idx}" for idx in range(180)])
     monkeypatch.setattr(data, "load_jailbreakbench", lambda n: [f"eval-{idx}" for idx in range(n)])
     monkeypatch.setattr(data, "load_dataset", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))

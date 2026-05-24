@@ -167,17 +167,36 @@ def load_harmful(
     Kaggle. When ``allow_partial_sources`` is enabled, one failed source is
     logged and skipped instead of collapsing the whole dataset-scale run.
     """
+    prompts, _source_counts = load_harmful_with_counts(
+        sources,
+        seed,
+        allow_partial_sources=allow_partial_sources,
+    )
+    return prompts
+
+
+def load_harmful_with_counts(
+    sources: Sequence[str],
+    seed: int,
+    *,
+    allow_partial_sources: bool = False,
+) -> tuple[List[str], dict[str, int]]:
+    """Load harmful prompts and return per-source available prompt counts."""
     prompts: List[str] = []
+    source_counts: dict[str, int] = {}
     for src in sources:
         if src not in HARMFUL_LOADERS:
             raise ValueError(f"Unknown harmful source: {src}")
         try:
             loaded = HARMFUL_LOADERS[src]()
         except Exception as exc:
+            source_counts[src] = 0
             if not allow_partial_sources:
                 raise
             logger.warning("Skipping harmful source %s after load failure: %s", src, exc)
             continue
+        loaded = list(dict.fromkeys(loaded))
+        source_counts[src] = len(loaded)
         prompts.extend(loaded)
     # Deduplicate on exact string.
     prompts = list(dict.fromkeys(prompts))
@@ -188,7 +207,7 @@ def load_harmful(
         )
     rng = random.Random(seed)
     rng.shuffle(prompts)
-    return prompts
+    return prompts, source_counts
 
 
 # -----------------------------------------------------------------------------
@@ -533,6 +552,7 @@ class Splits:
     strongreject_eval: Optional[List[str]] = None
     wildjailbreak_eval: Optional[List[str]] = None
     source_metadata: dict[str, str] = field(default_factory=dict)
+    source_counts: dict[str, int] = field(default_factory=dict)
 
 
 def build_splits(
@@ -586,7 +606,7 @@ def build_splits(
         partial source loading returns fewer than ``n_train + n_val`` harmful
         prompts. If omitted, split sizes remain strict.
     """
-    harmful = load_harmful(
+    harmful, source_counts = load_harmful_with_counts(
         harmful_sources,
         seed,
         allow_partial_sources=allow_partial_sources,
@@ -678,4 +698,5 @@ def build_splits(
         strongreject_eval=strongreject_eval,
         wildjailbreak_eval=wildjailbreak_eval,
         source_metadata=source_metadata,
+        source_counts=source_counts,
     )
