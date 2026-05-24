@@ -84,7 +84,10 @@ def build_model_card_metadata(
 
 
 def _manifest_hashes_ok(export_dir: Path, manifest: Mapping[str, Any]) -> bool:
-    for entry in manifest.get("files", []):
+    entries = list(manifest.get("files", []))
+    if not entries:
+        return False
+    for entry in entries:
         file_path = Path(entry.get("path", ""))
         if not file_path.is_absolute():
             file_path = export_dir / str(entry.get("name", ""))
@@ -93,6 +96,14 @@ def _manifest_hashes_ok(export_dir: Path, manifest: Mapping[str, Any]) -> bool:
         if hash_file(file_path) != entry.get("sha256"):
             return False
     return True
+
+
+def _manifest_lists_required_files(export_dir: Path, manifest: Mapping[str, Any]) -> bool:
+    entries = list(manifest.get("files", []))
+    names = {str(entry.get("name", "")) for entry in entries}
+    weight_names = {path.name for path in export_dir.glob("*.safetensors")}
+    required_names = {"config.json", "tokenizer_config.json"} | weight_names
+    return bool(entries) and required_names.issubset(names)
 
 
 def validate_export_roundtrip(
@@ -127,7 +138,7 @@ def validate_export_roundtrip(
 
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        report["manifest_ok"] = int(manifest.get("schema_version", 0)) >= 1
+        report["manifest_ok"] = int(manifest.get("schema_version", 0)) >= 1 and _manifest_lists_required_files(root, manifest)
         report["hashes_ok"] = _manifest_hashes_ok(root, manifest)
         model, tokenizer = load_fn(root)
         smoke = dict(smoke_eval_fn(model, tokenizer))

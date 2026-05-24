@@ -50,6 +50,37 @@ def missing_dataset_scale_requirements(counts: Mapping[str, int]) -> Dict[str, D
     }
 
 
+def build_metric_evidence_matrix(
+    *,
+    refusal_probe_count: int,
+    benign_control_count: int,
+    judge_backend: str,
+    judge_is_verified: bool,
+) -> Dict[str, Any]:
+    """Describe the actual prompt counts behind headline metric values."""
+    counts = {
+        "refusal_probe": int(refusal_probe_count),
+        "benign_control": int(benign_control_count),
+    }
+    missing = {
+        key: {"count": int(counts.get(key, 0)), "minimum": DATASET_SCALE_MINIMUM}
+        for key in ("refusal_probe", "benign_control")
+        if int(counts.get(key, 0)) < DATASET_SCALE_MINIMUM
+    }
+    return {
+        "schema_version": 1,
+        "dataset_scale_minimum": DATASET_SCALE_MINIMUM,
+        "dataset_scale": bool(judge_is_verified) and not missing,
+        "dataset_scale_missing_requirements": missing,
+        "metric_counts": counts,
+        "judge": {
+            "backend": str(judge_backend),
+            "verified": bool(judge_is_verified),
+            "status": "OFFICIAL_JUDGE" if judge_is_verified else "UNVERIFIED_JUDGE",
+        },
+    }
+
+
 def build_benchmark_matrix(
     *,
     refusal_probe_count: int,

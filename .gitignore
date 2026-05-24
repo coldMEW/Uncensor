@@ -31,6 +31,7 @@ htmlcov/
 outputs/
 diagnostics/
 leaderboard_cache.json
+.agents/
 *.pt
 *.pth
 

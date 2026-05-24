@@ -181,11 +181,15 @@ def test_kaggle_notebook_records_dual_probe_scores_without_raw_outputs() -> None
 
 def test_kaggle_notebook_records_benchmark_matrix_and_dataset_scale_status() -> None:
     source = _source()
-    assert "from src.benchmark_matrix import build_benchmark_matrix" in source
+    assert "from src.benchmark_matrix import build_benchmark_matrix, build_metric_evidence_matrix" in source
     assert "'benchmark_matrix': benchmark_matrix" in source
+    assert "'metric_evidence_matrix': metric_evidence_matrix" in source
     assert "'benchmark_source_metadata': benchmark_source_metadata" in source
     assert "'dataset_scale_verified': bool(benchmark_matrix['dataset_scale'])" in source
     assert "'dataset_scale_missing_requirements': benchmark_matrix['dataset_scale_missing_requirements']" in source
+    assert "'final_verification_dataset_scale': bool(metric_evidence_matrix['dataset_scale'])" in source
+    assert "'final_verification_dataset_scale_missing_requirements': metric_evidence_matrix['dataset_scale_missing_requirements']" in source
+    assert "final_verification['metric_evidence_matrix'] = metric_evidence_matrix" in source
     assert "harmbench_count = int(getattr(splits, 'source_counts', {}).get('walledai/HarmBench', 0))" in source
     assert '"harmbench_count = 0\\n"' in source
     assert "utility_eval_prompts = test_prompts" in source
@@ -253,8 +257,9 @@ def test_kaggle_notebook_uses_second_stage_candidate_grid_and_run_summary() -> N
     assert "preferred_coefficients=(float(best_result.get('coefficient', 0.20)), 0.20, 0.35)" in source
     assert "candidate_search_enabled = search_evidence_ready and search_stop_reason in ('CONTINUE', 'MAX_CYCLES_REACHED')" in source
     assert "partial_signal_plateau_ready = bool(" in source
-    assert "candidate_search_enabled = candidate_search_enabled and not partial_signal_plateau_ready" in source
-    assert "Skipping second-stage constrained search after partial-signal plateau" in source
+    assert "candidate_search_enabled = candidate_search_enabled and not partial_signal_plateau_ready" not in source
+    assert "Skipping second-stage constrained search after partial-signal plateau" not in source
+    assert "candidate_search_should_run = bool(candidate_search_enabled)" in source
 
 
 def test_kaggle_notebook_runs_bounded_partial_final_verification() -> None:

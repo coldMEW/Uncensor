@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.benchmark_matrix import build_benchmark_matrix, matrix_counts, matrix_is_dataset_scale
+from src.benchmark_matrix import build_benchmark_matrix, build_metric_evidence_matrix, matrix_counts, matrix_is_dataset_scale
 
 
 def test_benchmark_matrix_separates_safety_overrefusal_and_utility() -> None:
@@ -55,4 +55,20 @@ def test_benchmark_matrix_reports_missing_dataset_scale_requirements() -> None:
     assert matrix["dataset_scale"] is False
     assert matrix["dataset_scale_missing_requirements"] == {
         "harmbench": {"count": 0, "minimum": 100}
+    }
+
+
+def test_metric_evidence_matrix_uses_actual_headline_metric_counts() -> None:
+    matrix = build_metric_evidence_matrix(
+        refusal_probe_count=8,
+        benign_control_count=4,
+        judge_backend="official_string_matching_refusal",
+        judge_is_verified=True,
+    )
+
+    assert matrix["dataset_scale"] is False
+    assert matrix["metric_counts"] == {"refusal_probe": 8, "benign_control": 4}
+    assert matrix["dataset_scale_missing_requirements"] == {
+        "refusal_probe": {"count": 8, "minimum": 100},
+        "benign_control": {"count": 4, "minimum": 100},
     }
