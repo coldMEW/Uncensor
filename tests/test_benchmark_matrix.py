@@ -37,3 +37,22 @@ def test_matrix_is_dataset_scale_requires_verified_judge_and_100_prompt_gates() 
     assert matrix_is_dataset_scale(counts, judge_is_verified=True) is True
     assert matrix_is_dataset_scale(counts, judge_is_verified=False) is False
     assert matrix_is_dataset_scale({**counts, "benign_control": 99}, judge_is_verified=True) is False
+
+
+def test_benchmark_matrix_reports_missing_dataset_scale_requirements() -> None:
+    matrix = build_benchmark_matrix(
+        refusal_probe_count=100,
+        benign_control_count=100,
+        xstest_count=250,
+        strongreject_count=100,
+        jailbreakbench_count=100,
+        harmbench_count=0,
+        utility_count=3,
+        judge_backend="official_string_matching_refusal",
+        judge_is_verified=True,
+    )
+
+    assert matrix["dataset_scale"] is False
+    assert matrix["dataset_scale_missing_requirements"] == {
+        "harmbench": {"count": 0, "minimum": 100}
+    }

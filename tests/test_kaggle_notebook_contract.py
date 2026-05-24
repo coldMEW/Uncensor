@@ -132,6 +132,8 @@ def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> No
     source = _source()
     assert "final_baseline_refusing_items" in source
     assert "seed_final_baseline_refusals = heldout_baseline_refusing_items[:final_verification_target_refusal_count]" in source
+    assert "final_seeded_baseline_refusal_count = len(seed_final_baseline_refusals)" in source
+    assert "final_total_baseline_scan_count = final_seeded_baseline_refusal_count + final_additional_baseline_scan_count" in source
     assert "final_scanned_prompt_set = set(item[0] for item in seed_final_baseline_refusals)" in source
     assert "if prompt in final_scanned_prompt_set:" in source
     assert "Filtered final verification to" in source
@@ -139,7 +141,8 @@ def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> No
     assert "Keeping all final verification prompts" not in source
     assert "Skipping final intervention verification" in source
     assert "final_verification_inconclusive" in source
-    assert "'baseline_scan_count': int(final_baseline_scan_count)" in source
+    assert "'baseline_scan_count': int(final_total_baseline_scan_count)" in source
+    assert "'additional_baseline_scan_count': int(final_additional_baseline_scan_count)" in source
 
 
 def test_kaggle_notebook_reports_partial_plateau_without_claiming_success() -> None:
@@ -182,6 +185,7 @@ def test_kaggle_notebook_records_benchmark_matrix_and_dataset_scale_status() -> 
     assert "'benchmark_matrix': benchmark_matrix" in source
     assert "'benchmark_source_metadata': benchmark_source_metadata" in source
     assert "'dataset_scale_verified': bool(benchmark_matrix['dataset_scale'])" in source
+    assert "'dataset_scale_missing_requirements': benchmark_matrix['dataset_scale_missing_requirements']" in source
     assert "utility_eval_prompts = test_prompts" in source
     assert "utility_count=len(utility_eval_prompts)" in source
     assert "utility_count=0" not in source

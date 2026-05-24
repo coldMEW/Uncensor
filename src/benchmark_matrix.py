@@ -31,15 +31,23 @@ def matrix_counts(
 
 def matrix_is_dataset_scale(counts: Mapping[str, int], *, judge_is_verified: bool) -> bool:
     """Return whether the run has enough verified evidence for validity claims."""
-    return (
-        bool(judge_is_verified)
-        and int(counts.get("refusal_probe", 0)) >= DATASET_SCALE_MINIMUM
-        and int(counts.get("benign_control", 0)) >= DATASET_SCALE_MINIMUM
-        and int(counts.get("strongreject", 0)) >= DATASET_SCALE_MINIMUM
-        and int(counts.get("jailbreakbench", 0)) >= DATASET_SCALE_MINIMUM
-        and int(counts.get("harmbench", 0)) >= DATASET_SCALE_MINIMUM
-        and int(counts.get("xstest", 0)) >= DATASET_SCALE_MINIMUM
+    return bool(judge_is_verified) and not missing_dataset_scale_requirements(counts)
+
+
+def missing_dataset_scale_requirements(counts: Mapping[str, int]) -> Dict[str, Dict[str, int]]:
+    required_keys = (
+        "refusal_probe",
+        "benign_control",
+        "strongreject",
+        "jailbreakbench",
+        "harmbench",
+        "xstest",
     )
+    return {
+        key: {"count": int(counts.get(key, 0)), "minimum": DATASET_SCALE_MINIMUM}
+        for key in required_keys
+        if int(counts.get(key, 0)) < DATASET_SCALE_MINIMUM
+    }
 
 
 def build_benchmark_matrix(
@@ -67,6 +75,7 @@ def build_benchmark_matrix(
         "schema_version": 1,
         "dataset_scale_minimum": DATASET_SCALE_MINIMUM,
         "dataset_scale": matrix_is_dataset_scale(counts, judge_is_verified=judge_is_verified),
+        "dataset_scale_missing_requirements": missing_dataset_scale_requirements(counts),
         "judge": {
             "backend": str(judge_backend),
             "verified": bool(judge_is_verified),
