@@ -131,7 +131,7 @@ def test_kaggle_notebook_filters_search_to_baseline_refusals() -> None:
 def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> None:
     source = _source()
     assert "final_baseline_refusing_items" in source
-    assert "seed_final_baseline_refusals = heldout_baseline_refusing_items[:final_verification_target_refusal_count]" in source
+    assert "seed_final_baseline_refusals = heldout_baseline_refusing_items[:final_verification_target_refusal_count] if final_verification_enabled else []" in source
     assert "final_seeded_baseline_refusal_count = len(seed_final_baseline_refusals)" in source
     assert "final_total_baseline_scan_count = final_seeded_baseline_refusal_count + final_additional_baseline_scan_count" in source
     assert "final_scanned_prompt_set = set(item[0] for item in seed_final_baseline_refusals)" in source
@@ -141,6 +141,9 @@ def test_kaggle_notebook_filters_final_verification_to_baseline_refusals() -> No
     assert "Keeping all final verification prompts" not in source
     assert "Skipping final intervention verification" in source
     assert "final_verification_inconclusive" in source
+    assert "'planned_refusal_probe_count': len(final_verify_prompts)" in source
+    assert "'refusal_probe_count': len(final_prompt_results)" in source
+    assert "'benign_control_count': len(final_benign_results)" in source
     assert "'baseline_scan_count': int(final_total_baseline_scan_count)" in source
     assert "'additional_baseline_scan_count': int(final_additional_baseline_scan_count)" in source
 
@@ -190,6 +193,12 @@ def test_kaggle_notebook_records_benchmark_matrix_and_dataset_scale_status() -> 
     assert "'final_verification_dataset_scale': bool(metric_evidence_matrix['dataset_scale'])" in source
     assert "'final_verification_dataset_scale_missing_requirements': metric_evidence_matrix['dataset_scale_missing_requirements']" in source
     assert "final_verification['metric_evidence_matrix'] = metric_evidence_matrix" in source
+    assert "refusal_probe_count=int(final_verification.get('refusal_probe_count', 0))" in source
+    assert "benign_control_count=int(final_verification.get('benign_control_count', 0))" in source
+    assert "production_result_ok = bool(" in source
+    assert "'production_result_ok': production_result_ok" in source
+    assert "'production_blockers': production_blockers" in source
+    assert "FINAL_VERIFICATION_NOT_DATASET_SCALE" in source
     assert "harmbench_count = int(getattr(splits, 'source_counts', {}).get('walledai/HarmBench', 0))" in source
     assert '"harmbench_count = 0\\n"' in source
     assert "utility_eval_prompts = test_prompts" in source
